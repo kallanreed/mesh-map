@@ -21,10 +21,6 @@
       <input type="text" id="loc" name="loc" placeholder="(LAT) (LON)">
     </div>
     <div class="form-item">
-      <label for="path">Path:</label>
-      <input type="text" id="path" name="path">
-    </div>
-    <div class="form-item">
       <button tabindex="0" id="submit" name="submit" onclick="putRepeater()">Submit</button>
     </div>
   </div>
@@ -37,7 +33,6 @@
     const idTxt = $('id');
     const nameTxt = $('name');
     const locTxt = $('loc');
-    const pathTxt = $('path');
     const statusDiv = $('status');
 
     function setStatus(msg) {
@@ -52,13 +47,11 @@
       idTxt.value = '';
       nameTxt.value = '';
       locTxt.value = '';
-      pathTxt.value = '';
     }
 
     async function putRepeater() {
       const idVal = idTxt.value;
       const nameVal = nameTxt.value;
-      const pathVal = pathTxt.value;
       const [lat, lon] = locTxt.value.split(/\s*,?\s+/)
 
       if (idVal.length !== 2) {
@@ -71,7 +64,6 @@
         name: nameVal,
         lat: lat,
         lon: lon,
-        path: pathVal !== "" ? pathVal.split(',') : []
       };
 
       console.log(`putting ${payload}`);

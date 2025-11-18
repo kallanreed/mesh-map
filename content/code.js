@@ -69,8 +69,8 @@ function sampleMarker(s) {
 }
 
 function repeaterMarker(r) {
-  const stale = ageInDays(r.time) > 1;
-  const dead = ageInDays(r.time) > 5;
+  const stale = ageInDays(r.time) > 2;
+  const dead = ageInDays(r.time) > 8;
   const ageClass = (dead ? "dead" : (stale ? "stale" : ""));
   const icon = L.divIcon({
     className: '', // Don't use default Leaflet style.
@@ -81,7 +81,7 @@ function repeaterMarker(r) {
   const marker = L.marker([r.lat, r.lon], { icon: icon });
   const details = [
     `<strong>${escapeHtml(r.name)} [${r.id}]</strong>`,
-    `${r.lat.toFixed(4)}, ${r.lon.toFixed(4)}`,
+    `${r.lat.toFixed(4)}, ${r.lon.toFixed(4)} · <em>${(r.elev).toFixed(0)}m</em>`,
     `${new Date(r.time).toLocaleString()}`
   ].join('<br/>');
   marker.bindPopup(details, { maxWidth: 320 });
@@ -94,11 +94,12 @@ function getNearestRepeater(fromPos, repeaterList) {
   }
 
   let minRepeater = null;
-  let minDist = 30000;
+  let minDist = 30000; // Bigger than any valid dist.
 
   repeaterList.forEach(r => {
     const to = [r.lat, r.lon];
-    const dist = haversineMiles(fromPos, to);
+    const elev = r.elev ?? 0; // Allow height to impact distance.
+    const dist = haversineMiles(fromPos, to) - (0.25 * Math.sqrt(elev));
     if (dist < minDist) {
       minDist = dist;
       minRepeater = r;

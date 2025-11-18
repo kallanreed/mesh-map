@@ -12,7 +12,7 @@ body {
 .form-item label {
   width: 3em;
   text-align: right;
-  margin-right: 1em;
+  margin-right: 1.25em;
 }
 
 .form-item input {

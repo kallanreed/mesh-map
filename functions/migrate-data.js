@@ -11,7 +11,6 @@ async function migrateSamples(context) {
   //     const key = `${metadata.lat}|${metadata.lon}`;
   //     await store.put(key, "", {
   //       metadata: metadata,
-  //       expirationTtl: 15552000  // 180 days
   //     });
   //     await store.delete(s.name);
   //   }
@@ -24,7 +23,6 @@ async function migrateSamples(context) {
   //   if (key !== s.name) {
   //     await store.put(key, "", {
   //       metadata: metadata,
-  //       expirationTtl: 15552000  // 180 days
   //     });
   //     await store.delete(s.name);
   //   }

@@ -24,7 +24,7 @@ export async function onRequest(context) {
       name: r.metadata.name,
       lat: r.metadata.lat,
       lon: r.metadata.lon,
-      path: r.metadata.path,
+      elev: r.metadata.elev ?? 0,
     });
   });
 

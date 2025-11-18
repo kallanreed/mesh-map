@@ -10,8 +10,8 @@ export async function onRequest(context) {
   const path = data.path ?? [];
 
   const key = `${lat.toFixed(4)}|${lon.toFixed(4)}`;
-  const resp = await store.getWithMetadata(key);
   const metadata = { time: time, lat: lat, lon: lon, path: path };
+  const resp = await store.getWithMetadata(key);
 
   if (resp.value !== null && resp.metadata !== null && ageInDays(resp.metadata.time) < 1) {
     // Merge path information with existing.
@@ -24,8 +24,7 @@ export async function onRequest(context) {
 
   console.log(`PUT ${key} -> ${JSON.stringify(metadata)}`);
   await store.put(key, "", {
-    metadata: metadata,
-    expirationTtl: 15552000  // 180 days
+    metadata: metadata
   });
 
   return new Response('OK');
