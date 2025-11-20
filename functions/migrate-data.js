@@ -1,4 +1,4 @@
-import { sampleKey } from '../content/shared.js'
+import { sampleKey } from '../content/shared_server.js'
 
 async function migrateSamples(context) {
   const store = context.env.SAMPLES;

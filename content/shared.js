@@ -1,5 +1,3 @@
-import geo from 'ngeohash';
-
 // Haversine distance between two [lat, lon] points, in miles.
 export function haversineMiles(a, b) {
   const R = 3958.8; // Earth radius in miles
@@ -57,9 +55,4 @@ export function parseLocation(latStr, lonStr) {
 export function ageInDays(time) {
   const dayInMillis = 24 * 60 * 60 * 1000;
   return (Date.now() - new Date(time)) / dayInMillis;
-}
-
-// Generates the key for a sample given lat/lon.
-export function sampleKey(lat, lon) {
-  return geo.encode(lat, lon, 8);
 }
