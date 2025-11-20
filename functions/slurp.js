@@ -1,4 +1,4 @@
-import { sampleKey } from '../content/shared_server.js'
+import { sampleKey } from '../content/shared.js'
 
 // Pull all the live KV data into the local emulator.
 export async function onRequest(context) {

@@ -1,5 +1,4 @@
-import { parseLocation, ageInDays } from '../content/shared.js'
-import { sampleKey } from '../content/shared_server.js'
+import { parseLocation, ageInDays, sampleKey } from '../content/shared.js'
 
 export async function onRequest(context) {
   const request = context.request;

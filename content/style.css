@@ -71,6 +71,33 @@ body,
   font-weight: 500;
 }
 
+.mesh-control input[type="checkbox"] {
+  appearance: none;           /* Remove native checkbox */
+  -webkit-appearance: none;   /* Safari */
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  cursor: pointer;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.mesh-control input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: -2px;
+  left: 2px;
+  font-size: 16px;
+  color: #0a66c2;
+  pointer-events: none;
+}
+
+.mesh-control input[type="checkbox"]:hover {
+  background: #e8e8e8;
+}
+
 .mesh-control input,
 .mesh-control select {
   border-radius: 3px;

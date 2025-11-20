@@ -11,8 +11,9 @@ let edgeLayer = L.layerGroup().addTo(map);
 let sampleLayer = L.layerGroup().addTo(map);
 let repeaterLayer = L.layerGroup().addTo(map);
 let nodes = null; // Holds fetched results.
-let repeaterRenderMode = 'all';
+let repeaterRenderMode = 'hit';
 let repeaterSearch = '';
+let showEdges = true;
 
 const mapControl = L.control({ position: 'topright' });
 mapControl.onAdd = m => {
@@ -24,16 +25,22 @@ mapControl.onAdd = m => {
         Repeaters:
         <select id="repeater-filter-select">
           <option value="all">All</option>
-          <option value="used">Used</option>
+          <option value="hit" selected="true">Hit</option>
           <option value="none">None</option>
         </select>
       </label>
     </div>
     <div class="mesh-control-row">
       <label>
+        Show Edges:
+        <input type="checkbox" checked="true" id="show-edges" />
+      </label>
+    </div>
+    <div class="mesh-control-row">
+      <label>
         Find Id:
         <input type="text" id="repeater-search" />
-      </lable>
+      </label>
     </div>
     <div class="mesh-control-row">
       <button type="button" id="refresh-map-button">Refresh map</button>
@@ -46,12 +53,18 @@ mapControl.onAdd = m => {
       renderNodes(nodes);
     });
 
+  div.querySelector("#show-edges")
+    .addEventListener("change", (e) => {
+      showEdges = e.target.checked;
+      renderNodes(nodes);
+    });
+
   div.querySelector("#repeater-search")
     .addEventListener("input", (e) => {
       repeaterSearch = e.target.value.toLowerCase();
       renderNodes(nodes);
-  });
-  
+    });
+
   div.querySelector("#refresh-map-button")
     .addEventListener("click", () => refreshCoverage());
 
@@ -77,7 +90,10 @@ function sampleMarker(s) {
   const style = { radius: 6, weight: 1, color: color, fillOpacity: .9 };
   const marker = L.circleMarker([s.lat, s.lon], style);
   const date = new Date(s.time);
-  const details = `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}<br/>${date.toLocaleString()}`;
+  const details = `
+    ${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}<br/>
+    ${date.toLocaleString()}
+    ${s.path.length === 0 ? '' : '<br/>Hit: ' + s.path.join(',')}`;
   marker.bindPopup(details, { maxWidth: 320 });
   return marker;
 }
@@ -141,6 +157,7 @@ function renderNodes(nodes) {
   // Are repeaters/edges needed?
   if (repeaterRenderMode === 'none') return;
 
+  // TODO: Build indexes once.
   // Index repeaters.
   nodes.repeaters.forEach(r => {
     if (repeaterSearch !== '') {
@@ -154,8 +171,9 @@ function renderNodes(nodes) {
   });
 
   // TODO: render paths only when hovered over a sample.
-  // Draw edges.
-  const usedRepeaters = new Set();
+
+  // Draw edges, determine hit repeaters.
+  const hitRepeaters = new Set();
   const showAll = repeaterRenderMode === 'all';
   outEdges.forEach(edge => {
     const candidates = idToRepeaters.get(edge.id);
@@ -167,12 +185,14 @@ function renderNodes(nodes) {
     const from = edge.pos;
     const nearest = getNearestRepeater(from, candidates);
     const to = [nearest.lat, nearest.lon];
-    usedRepeaters.add(nearest);
-    L.polyline([from, to], { weight: 2, opacity: 0.8, dashArray: '1,6' }).addTo(edgeLayer);
+    hitRepeaters.add(nearest);
+    if (showEdges === true) {
+      L.polyline([from, to], { weight: 2, opacity: 0.6, dashArray: '1,6' }).addTo(edgeLayer);
+    }
   });
 
   // Add repeaters.
-  const repeatersToAdd = showAll ? [...idToRepeaters.values()].flat() : usedRepeaters;
+  const repeatersToAdd = showAll ? [...idToRepeaters.values()].flat() : hitRepeaters;
   repeatersToAdd.forEach(r => {
     repeaterLayer.addLayer(repeaterMarker(r));
   });
