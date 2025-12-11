@@ -3,7 +3,6 @@ import {
   centerPos,
   coverageKey,
   geo,
-  haversineMiles,
   isValidLocation
 } from "/content/shared.js";
 
@@ -12,29 +11,18 @@ const $ = id => document.getElementById(id);
 const statusEl = $("status");
 const deviceNameEl = $("deviceName");
 const channelInfoEl = $("channelInfo");
-const lastSampleInfoEl = $("lastSampleInfo");
-const currentTileEl = $("currentTileHash");
-const currentNeedsPingEl = $("currentNeedsPing");
-const mapEl = $("map");
-const controlsSection = $("controls");
-const intervalSection = $("interval-controls");
 const ignoredRepeaterId = $("ignoredRepeaterId");
-const logBody = $("logBody");
-const debugConsole = $("debugConsole");
 
 const connectBtn = $("connectBtn");
-const disconnectBtn = $("disconnectBtn");
 const sendPingBtn = $("sendPingBtn");
 const autoToggleBtn = $("autoToggleBtn");
-const clearLogBtn = $("clearLogBtn");
-const pingModeSelect = $("pingModeSelect");
-const intervalSelect = $("intervalSelect");
-const minDistanceSelect = $("minDistanceSelect");
 const ignoredRepeaterBtn = $("ignoredRepeaterBtn");
 
 const wardriveChannelName = "#wardrive";
+const refreshTileAge = 2; // Tiles older than this will get pinged again.
 
 // --- Global Init ---
+// Map setup
 const map = L.map('map', {
   worldCopyJump: true,
   dragging: true,
@@ -45,20 +33,54 @@ const map = L.map('map', {
   tap: false,
   zoomControl: false,
   doubleClickZoom: false
-}).setView(centerPos, 12);
+}).setView(centerPos, 11);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 13,
+  maxZoom: 15,
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
+
+// Map layers
+const pingLayer = L.layerGroup().addTo(map);
 const coverageLayer = L.layerGroup().addTo(map);
 const currentLocMarker = L.circleMarker([0, 0], {
-  radius: 3,
-  weight: 0,
-  color: "red",
-  fillOpacity: .8
+  radius: 5,
+  weight: 2,
+  color: "white",
+  fillColor: "#69DBFE",
+  fillOpacity: .9,
+  className: "shadow-sm"
 }).addTo(map);
 
+// Map controls
+const mapControl = L.control({ position: 'bottomleft' });
+mapControl.onAdd = m => {
+  const div = L.DomUtil.create('div', 'leaflet-control');
+  div.innerHTML = `
+    <button class="px-2 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-md font-medium shadow-sm" id="followBtn">🧭</button>
+  `;
+
+  div.querySelector("#followBtn")
+    .addEventListener("click", () => {
+      state.following = !state.following;
+      updateFollowButton();
+    });
+
+  // Don’t let clicks on the control bubble up and pan/zoom the map.
+  L.DomEvent.disableClickPropagation(div);
+  L.DomEvent.disableScrollPropagation(div);
+
+  return div;
+};
+mapControl.addTo(map);
+
+// Stop following if the user interacts with the map.
+map.on("mousedown touchstart wheel dragstart", () => {
+  state.following = false;
+  updateFollowButton();
+});
+
+// --- Logging ---
 function setStatus(text, color = null) {
   statusEl.textContent = text;
   log(`status: ${text}`);
@@ -66,66 +88,63 @@ function setStatus(text, color = null) {
 }
 
 function log(msg) {
-  // const entry = document.createElement('pre');
-  // entry.textContent = msg;
-  // debugConsole.appendChild(entry);
-
   console.log(msg);
 }
 
 // --- State ---
-const LOG_KEY = "meshcoreWardriveLogV1";
+// TODO: store pings in local storage
 const IGNORED_ID_KEY = "meshcoreWardriveIgnoredIdV1"
 
 const state = {
   connection: null,
   selfInfo: null,
   wardriveChannel: null,
-  pingMode: "fill",
   running: false,
   autoTimerId: null,
-  lastSample: null, // { lat, lon, timestamp }
   wakeLock: null,
   ignoredId: null, // Allows a repeater to be ignored.
-  coveredTiles: new Set(),
+  tiles: new Map(),
+  following: true,
   locationTimer: null,
   lastPosUpdate: 0, // Timestamp of last location update.
   currentPos: [0, 0],
-  log: [],
 };
 
-// --- Utility functions ---
-function getIntervalMinutes() {
-  return parseFloat(intervalSelect.value || "0.5");
-}
-
-function getMinDistanceMiles() {
-  return parseFloat(minDistanceSelect.value || "0.5");
-}
-
-function formatIsoLocal(iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString();
-}
-
 // --- Coverage Functions ---
-async function refreshCoverageData() {
+function mergeCoverage(id, value) {
+  const prev = state.tiles.get(id);
+
+  if (!prev) {
+    state.tiles.set(id, value);
+    return;
+  }
+
+  // h is 0|1 for "heard" -- prefer heard.
+  // a is "age in days" -- prefer newest.
+  prev.h = Math.max(value.h, prev.h);
+  prev.a = Math.min(value.a, prev.a);
+}
+
+async function refreshCoverage() {
   try {
     const resp = await fetch("/get-wardrive-coverage");
-    const coveredTiles = (await resp.json()) ?? [];
-    log(`Got ${coveredTiles.length} covered tiles from service.`);
-    coveredTiles.forEach(x => state.coveredTiles.add(x));
+    const coverage = (await resp.json()) ?? [];
+    log(`Got ${coverage.length} coverage tiles from service.`);
+    coverage.forEach(([id, val]) => mergeCoverage(id, val));
   } catch (e) {
     console.error("Getting coverage failed", e);
     setStatus("Get coverage failed", "text-red-300");
   }
 }
 
-function getCoverageBoxMarker(tileId) {
+function getCoverageBoxMarker(tileId, info) {
   const [minLat, minLon, maxLat, maxLon] = geo.decode_bbox(tileId);
+  const color = info.a > 3
+    ? (info.h ? "#8CA685" : "#E09D9D")  // Old
+    : (info.h ? "#398821" : "#E04748"); // Fresh
+
   const style = {
-    color: "#CC6CE7",
+    color: color,
     weight: 1,
     fillOpacity: 0.4,
   };
@@ -133,86 +152,18 @@ function getCoverageBoxMarker(tileId) {
 }
 
 function addCoverageBox(tileId) {
-  coverageLayer.addLayer(getCoverageBoxMarker(tileId));
+  const info = state.tiles.get(tileId);
+  if (info.marker) {
+    coverageLayer.removeLayer(info.marker);
+  }
+
+  info.marker = getCoverageBoxMarker(tileId, info);
+  coverageLayer.addLayer(info.marker);
 }
 
 function redrawCoverage() {
   coverageLayer.clearLayers();
-  state.coveredTiles.forEach(c => {
-    addCoverageBox(c);
-  });
-}
-
-// --- Local storage log ---
-function loadLog() {
-  try {
-    const raw = localStorage.getItem(LOG_KEY);
-    if (raw) {
-      state.log = JSON.parse(raw);
-    }
-  } catch (e) {
-    console.warn("Failed to load wardrive log", e);
-  }
-  renderLog();
-}
-
-function saveLog() {
-  try {
-    localStorage.setItem(LOG_KEY, JSON.stringify(state.log));
-  } catch (e) {
-    console.warn("Failed to save wardrive log", e);
-  }
-}
-
-function addLogEntry(entry) {
-  state.log.push(entry);
-  // Keep it from growing forever
-  const maxEntries = 50;
-  if (state.log.length > maxEntries) {
-    state.log.splice(0, state.log.length - maxEntries);
-  }
-  saveLog();
-  renderLog();
-}
-
-function renderLog() {
-  logBody.innerHTML = "";
-  const rows = state.log.reverse(); // Newest first
-  for (const entry of rows) {
-    const tr = document.createElement("tr");
-    tr.className = "hover:bg-slate-900/60";
-    const skipped = entry.skipped ?? false;
-
-    const cells = [
-      formatIsoLocal(entry.timestamp),
-      entry.lat?.toFixed(4) ?? "",
-      entry.lon?.toFixed(4) ?? "",
-      entry.mode ?? "",
-      entry.distanceMiles != null ? entry.distanceMiles.toFixed(1) : "",
-      entry.sentToMesh ? "✅" : skipped ? "⊗" : "❌",
-      entry.sentToService ? "✅" : skipped ? "⊗" : "❌",
-      entry.notes ?? "",
-    ];
-
-    for (const text of cells) {
-      const td = document.createElement("td");
-      td.className = "px-2 py-1 align-top";
-      td.textContent = text;
-      tr.appendChild(td);
-    }
-
-    logBody.appendChild(tr);
-  }
-}
-
-function updateLastSampleInfo() {
-  if (!state.lastSample) {
-    lastSampleInfoEl.textContent = "None yet";
-    return;
-  }
-  const { lat, lon, timestamp } = state.lastSample;
-  lastSampleInfoEl.textContent =
-    `${lat.toFixed(4)}, ${lon.toFixed(4)} @ ` + formatIsoLocal(timestamp);
+  state.tiles.keys().forEach(addCoverageBox);
 }
 
 // --- Ignored Id ---
@@ -269,13 +220,12 @@ async function updateCurrentPosition() {
   const lon = pos.coords.longitude;
   state.currentPos = [lat, lon];
 
-  currentLocMarker.setLatLng(state.currentPos);
-  map.panTo(state.currentPos);
+  currentLocMarker
+    .setLatLng(state.currentPos)
+    .bringToFront();
 
-  const coverageTileId = coverageKey(lat, lon);
-  const needsPing = !state.coveredTiles.has(coverageTileId);
-  currentTileEl.innerText = coverageTileId;
-  currentNeedsPingEl.innerText = needsPing ? "✅" : "⛔";
+  if (state.following)
+    map.panTo(state.currentPos);
 
   state.lastPosUpdate = Date.now();
 }
@@ -306,7 +256,7 @@ async function ensureCurrentPositionIsFresh() {
   }
 }
 
-// --- WakeLock helpers ---
+// --- WakeLock ---
 async function acquireWakeLock() {
   // Bluefy-specfic -- it's a bit better when available.
   if ('setScreenDimEnabled' in navigator.bluetooth) {
@@ -343,7 +293,7 @@ async function releaseWakeLock() {
   }
 }
 
-// --- Wardrive channel helpers ---
+// --- Wardrive channel ---
 async function createWardriveChannel() {
   const create = window.confirm(
     `Channel "${wardriveChannelName}" not found on this device. Create it now?`
@@ -407,14 +357,14 @@ async function sendPing({ auto = false } = {}) {
     return;
   }
 
-  // Get the channel.
-  let channel;
-  try {
-    channel = await ensureWardriveChannel();
-  } catch (e) {
-    console.warn(`Channel "${wardriveChannelName}" not available`, e);
-    setStatus(`No "${wardriveChannelName}" channel`, "text-amber-300");
-    return;
+  if (!state.channel) {
+    try {
+      state.channel = await ensureWardriveChannel();
+    } catch (e) {
+      console.warn(`Channel "${wardriveChannelName}" not available`, e);
+      setStatus(`No "${wardriveChannelName}" channel`, "text-amber-300");
+      return;
+    }
   }
 
   try {
@@ -432,106 +382,80 @@ async function sendPing({ auto = false } = {}) {
   }
 
   const [lat, lon] = pos;
-  const coverageTileId = coverageKey(lat, lon);
-  let distanceMilesValue = null;
+  const tileId = coverageKey(lat, lon);
 
-  if (state.pingMode === "interval") {
-    // Ensure minimum distance met for interval auto ping.
-    const minMiles = getMinDistanceMiles();
-    if (auto && state.lastSample && minMiles > 0) {
-      distanceMilesValue = haversineMiles(
-        [state.lastSample.lat, state.lastSample.lon], [lat, lon]);
-      if (distanceMilesValue < minMiles) {
-        log(`Min distance not met ${distanceMilesValue}, skipping.`);
-        setStatus("Skipped ping", "text-amber-300");
-        addLogEntry({
-          timestamp: new Date().toISOString(),
-          lat,
-          lon,
-          mode: "auto",
-          distanceMiles: distanceMilesValue,
-          skipped: true,
-          sentToMesh: false,
-          sentToService: false,
-        });
-        return;
-      }
-    }
-  } else {
-    // Ensure ping is needed in the current tile.
-    const needsPing = !state.coveredTiles.has(coverageTileId);
-    if (auto && !needsPing) {
-      setStatus("No ping needed", "text-amber-300");
-      return;
-    }
+  // A Ping is needed in the current tile if the tile
+  // is missing an entry or the entry is old.
+  const info = state.tiles.get(tileId);
+  const needsPing = !info || info.a > refreshTileAge;
+  if (auto && !needsPing) {
+    setStatus("No ping needed", "text-amber-300");
+    return;
   }
 
-  setStatus("Sending ping…", "text-sky-300");
-
+  // TODO: would be nice to just send the geohash.
   let text = `${lat.toFixed(4)} ${lon.toFixed(4)}`;
   if (state.ignoredId !== null) text += ` ${state.ignoredId}`;
-  let sentToMesh = false;
-  let sentToService = false;
-  let notes = "";
 
   try {
     // Send mesh message: "<lat> <lon> [<id>]".
-    await state.connection.sendChannelTextMessage(channel.channelIdx, text);
-    sentToMesh = true;
+    await state.connection.sendChannelTextMessage(state.channel.channelIdx, text);
     log("Sent MeshCore wardrive ping:", text);
+    setStatus(auto ? "Auto ping sent" : "Ping sent", "text-emerald-300");
   } catch (e) {
     console.error("Mesh send failed", e);
     setStatus("Mesh send failed", "text-red-300");
-    notes = "Mesh Fail: " + e.message;
+    return;
   }
 
-  if (sentToMesh) {
-    // Send sample to service.
-    try {
-      await fetch("https://mesh-map.pages.dev/put-sample", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lon }),
-      });
-      sentToService = true;
-    } catch (e) {
-      console.error("Service POST failed", e);
-      setStatus("Web send failed", "text-red-300");
-      notes = "Web Fail: " + e.message;
-    }
-
-    // Even if sending the sample POST failed, consider this
-    // the new 'last sample' to avoid spam.
-    const nowIso = new Date().toISOString();
-    state.lastSample = { lat, lon, timestamp: nowIso };
-    updateLastSampleInfo();
-
-    if (!state.coveredTiles.has(coverageTileId)) {
-      state.coveredTiles.add(coverageTileId);
-      addCoverageBox(coverageTileId);
-    }
+  // Send sample to service.
+  try {
+    await fetch("https://mesh-map.pages.dev/put-sample", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lon }),
+    });
+  } catch (e) {
+    console.error("Service POST failed", e);
+    setStatus("Web send failed", "text-red-300");
   }
 
-  // Log result.
-  const entry = {
-    timestamp: new Date().toISOString(),
-    lat,
-    lon,
-    mode: auto ? "auto" : "manual",
-    distanceMiles: distanceMilesValue,
-    sentToMesh,
-    sentToService,
-    notes,
-  };
+  mergeCoverage(tileId, { h: 0, a: 0 });
+  addCoverageBox(tileId);
+  // TODO: start background fetch to see if heard
+  // and actually update the tile then.
+}
 
-  addLogEntry(entry);
+// --- UI ---
+function updateControlsForConnection(connected) {
+  connectBtn.disabled = false;
 
-  if (sentToMesh) {
-    setStatus(auto ? "Auto ping sent" : "Ping sent", "text-emerald-300");
+  if (connected) {
+    connectBtn.textContent = "Disconnect";
+    connectBtn.classList.remove("bg-emerald-600", "hover:bg-emerald-500");
+    connectBtn.classList.add("bg-red-600", "hover:bg-red-500");
+    sendPingBtn.disabled = false;
+    autoToggleBtn.disabled = false;
+  } else {
+    connectBtn.textContent = "Connect";
+    connectBtn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
+    connectBtn.classList.remove("bg-red-600", "hover:bg-red-500");
+    sendPingBtn.disabled = true;
+    autoToggleBtn.disabled = true;
   }
 }
 
-// --- Auto mode ---
+function updateFollowButton() {
+  const followBtn = $("followBtn");
+  if (state.following) {
+    followBtn.classList.remove("bg-zinc-600", "hover:bg-zinc-500");
+    followBtn.classList.add("bg-sky-600", "hover:bg-sky-500");
+  } else {
+    followBtn.classList.add("bg-zinc-600", "hover:bg-zinc-500");
+    followBtn.classList.remove("bg-sky-600", "hover:bg-sky-500");
+  }
+}
+
 function updateAutoButton() {
   if (state.running) {
     autoToggleBtn.textContent = "Stop Auto Ping";
@@ -544,6 +468,7 @@ function updateAutoButton() {
   }
 }
 
+// --- Auto mode ---
 function stopAutoPing() {
   if (state.autoTimerId != null) {
     clearInterval(state.autoTimerId);
@@ -560,29 +485,16 @@ async function startAutoPing() {
     return;
   }
 
-  const minutes = getIntervalMinutes();
-  if (!minutes || minutes <= 0) {
-    alert("Please choose a valid ping interval.");
-    return;
-  }
-
   stopAutoPing();
 
   state.running = true;
   updateAutoButton();
 
-  let intervalMs = 10 * 1000;
-  if (state.pingMode === "interval") {
-    intervalMs = minutes * 60 * 1000;
-  }
-
-  // TODO: Maybe this should be fetched periodically.
-  await refreshCoverageData();
+  await refreshCoverage();
   redrawCoverage();
 
-  setStatus("Auto mode started", "text-emerald-300");
-
   // Send first ping immediately, then on interval.
+  let intervalMs = 10 * 1000;
   sendPing({ auto: true }).catch(console.error);
   state.autoTimerId = setInterval(() => {
     sendPing({ auto: true }).catch(console.error);
@@ -614,25 +526,24 @@ async function handleConnect() {
   } catch (e) {
     console.error("Failed to open BLE connection", e);
     setStatus("Failed to connect", "text-red-300");
-    connectBtn.disabled = false;
+    updateControlsForConnection(false);
   }
 }
 
 async function handleDisconnect() {
   if (!state.connection) return;
+
   try {
     await state.connection.close();
   } catch (e) {
     console.warn("Error closing connection", e);
   }
-  // onDisconnected will be called from the BLE event
+
+  // NB: onDisconnected will be called from the BLE event.
 }
 
 async function onConnected() {
   setStatus("Connected (syncing…)", "text-emerald-300");
-  disconnectBtn.disabled = false;
-  connectBtn.disabled = true;
-  controlsSection.classList.remove("hidden");
 
   try {
     try {
@@ -646,6 +557,7 @@ async function onConnected() {
     deviceNameEl.textContent = selfInfo?.name
       ? `Device: ${selfInfo.name}`
       : "Device connected";
+
     setStatus(
       `Connected to ${selfInfo?.name ?? "MeshCore"}`,
       "text-emerald-300"
@@ -657,6 +569,9 @@ async function onConnected() {
     } catch {
       // Will attempt again on ping.
     }
+
+    // Don't enable ping buttons until after ensure channel.
+    updateControlsForConnection(true);
   } catch (e) {
     console.error("Error during initial sync", e);
     setStatus("Connected, but failed to init", "text-amber-300");
@@ -669,24 +584,20 @@ function onDisconnected() {
 
   deviceNameEl.textContent = "";
   channelInfoEl.textContent = "";
-  disconnectBtn.disabled = true;
-  connectBtn.disabled = false;
-  controlsSection.classList.add("hidden");
 
   state.connection = null;
   state.wardriveChannel = null;
 
-  log("Disconnected");
+  updateControlsForConnection(false);
   setStatus("Disconnected", "text-red-300");
 }
 
 // --- Event bindings ---
 connectBtn.addEventListener("click", () => {
-  handleConnect().catch(console.error);
-});
-
-disconnectBtn.addEventListener("click", () => {
-  handleDisconnect().catch(console.error);
+  if (!state.connection)
+    handleConnect().catch(console.error);
+  else
+    handleDisconnect().catch(console.error);
 });
 
 sendPingBtn.addEventListener("click", () => {
@@ -702,32 +613,7 @@ autoToggleBtn.addEventListener("click", async () => {
   }
 });
 
-pingModeSelect.addEventListener("change", async () => {
-  const pingMode = pingModeSelect.value;
-
-  if (state.pingMode === pingMode) {
-    return;
-  }
-
-  stopAutoPing();
-  state.pingMode = pingMode;
-  if (pingMode === "interval") {
-    intervalSection.classList.remove("hidden");
-  } else {
-    intervalSection.classList.add("hidden");
-  }
-});
-
 ignoredRepeaterBtn.addEventListener("click", promptIgnoredId);
-
-clearLogBtn.addEventListener("click", () => {
-  if (!confirm("Clear local wardrive log?")) return;
-  state.log = [];
-  state.lastSample = null;
-  updateLastSampleInfo();
-  saveLog();
-  renderLog();
-});
 
 // Automatically release wake lock when the page is hidden.
 document.addEventListener('visibilitychange', async () => {
@@ -756,12 +642,11 @@ if ('bluetooth' in navigator) {
 
 export async function onLoad() {
   try {
-    loadLog();
     loadIgnoredId();
-    updateLastSampleInfo();
+    updateControlsForConnection(false);
     updateAutoButton();
 
-    await refreshCoverageData();
+    await refreshCoverage();
     redrawCoverage();
 
     await startLocationTracking();

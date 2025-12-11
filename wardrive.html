@@ -40,144 +40,48 @@
         </div>
       </header>
 
-      <!-- Map and Current Tile -->
-      <section class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 space-y-5">
-        <div id="map" class="rounded-lg h-50"></div>
-        <div>
-          <div class="text-med space-y-1 text-slate-300">
-            Current Tile
-          </div>
-          <div class="grid grid-cols-2 text-sm space-y-1 text-slate-300">
-            <div>
-              Geohash: <span class="text-slate-400" id="currentTileHash">none</span>
-            </div>
-            <div>
-              Needs Ping: <span class="text-slate-400" id="currentNeedsPing">n/a</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Connection controls -->
-      <section class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 space-y-2 shadow">
-        <div class="flex flex-wrap items-center gap-2">
+      <!-- Buttons -->
+      <section>
+        <div class="flex items-center gap-2">
           <button id="connectBtn"
             class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium disabled:opacity-40">
-            Connect via BLE
+            Connect
           </button>
-          <button id="disconnectBtn" disabled
-            class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-sm font-medium disabled:opacity-40">
-            Disconnect
-          </button>
+
+          <div id="pingButtons" class="ml-auto flex items-center gap-2">
+            <button id="sendPingBtn"
+              disabled
+              class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-sm font-medium disabled:opacity-40">
+              Send Ping
+            </button>
+            <button id="autoToggleBtn"
+              disabled
+              class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium disabled:opacity-40">
+              Start Auto Ping
+            </button>
+          </div>
         </div>
       </section>
 
-      <!-- Ping controls -->
-      <section id="controls" class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 space-y-5 hidden">
+      <!-- The Map -->
+      <div id="map" class="rounded-lg h-140 shadow-sm"></div>
 
-        <!-- Buttons -->
-        <div class="flex flex-wrap items-center gap-2">
-          <button id="sendPingBtn"
-            class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-sm font-medium disabled:opacity-40">
-            Send 1 Ping
-          </button>
-          <button id="autoToggleBtn"
-            class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium disabled:opacity-40">
-            Start Auto Ping
-          </button>
-        </div>
-
-        <!-- Ping Mode Control -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div class="space-y-1">
-            <label class="block text-sm text-slate-300">Auto Ping Mode</label>
-            <select id="pingModeSelect"
-              class="w-full bg-slate-900/70 border border-slate-600 rounded-lg px-2 py-1.5 text-sm">
-              <option value="fill" select>Fill Missing Tiles</option>
-              <option value="interval">Interval</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Interval Controls -->
-        <section id="interval-controls" class="grid grid-cols-2 gap-4 hidden">
-          <div class="space-y-1">
-            <label class="block text-sm text-slate-300">Ping Interval</label>
-            <select id="intervalSelect"
-              class="w-full bg-slate-900/70 border border-slate-600 rounded-lg px-2 py-1.5 text-sm">
-              <option value="0.5">Every 30 seconds</option>
-              <option value="1" selected>Every 1 minute</option>
-              <option value="2">Every 2 minutes</option>
-              <option value="5">Every 5 minutes</option>
-              <option value="10">Every 10 minutes</option>
-            </select>
-          </div>
-
-          <div class="space-y-1">
-            <label class="block text-sm text-slate-300">Min Distance</label>
-            <select id="minDistanceSelect"
-              class="w-full bg-slate-900/70 border border-slate-600 rounded-lg px-2 py-1.5 text-sm">
-              <option value="0.5">0.5 miles</option>
-              <option value="1" selected>1 mile</option>
-              <option value="2">2 miles</option>
-              <option value="5">5 miles</option>
-            </select>
-          </div>
-        </section>
-
-        <!-- Last Ping -->
+      <!-- Ignore Repeater -->
+      <section class="bg-slate-800/80 border border-slate-700 rounded-lg p-2 space-y-2 shadow-sm">
         <div class="space-y-1">
-          <label class="block text-sm text-slate-300">Last Ping</label>
-          <div id="lastSampleInfo" class="text-xs text-slate-400">
-            None
+          <div class="text-xs italic text-slate-400">
+            If you're using a mobile repeater, ignore its id.
           </div>
-        </div>
-
-        <!-- Ignore Repeater -->
-        <section>
-          <div class="space-y-1">
-            <div class="text-xs italic text-slate-400">
-              If you're using a mobile repeater, ignore its id.
-            </div>
-            <div class="flex flex-wrap items-center gap-1">
-              <button id="ignoredRepeaterBtn"
-                class="px-2 mr-2 rounded-md bg-zinc-600 hover:bg-zinc-500 text-sm font-sm disabled:opacity-40">
-                Set
-              </button>
-              <label class="text-xs text-slate-300">Ignored Repeater Id</label>
-              <div id="ignoredRepeaterId" class="text-xs text-slate-400">
-                None
-              </div>
+          <div class="flex flex-wrap items-center gap-1">
+            <button id="ignoredRepeaterBtn"
+              class="px-2 mr-2 rounded-md bg-zinc-600 hover:bg-zinc-500 text-sm font-sm disabled:opacity-40">
+              Set
+            </button>
+            <label class="text-xs text-slate-300">Ignored Repeater Id</label>
+            <div id="ignoredRepeaterId" class="text-xs text-slate-400">
+              None
             </div>
           </div>
-        </section>
-      </section>
-
-      <!-- Log -->
-      <section class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 space-y-2">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold">Log</h2>
-          <button id="clearLogBtn" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-slate-100">
-            Clear log
-          </button>
-        </div>
-
-        <div class="overflow-x-auto max-h-72 border border-slate-700/80 rounded-lg">
-          <table class="min-w-full text-xs">
-            <thead class="bg-slate-900/60 text-slate-300">
-              <tr>
-                <th class="px-2 py-1 text-left">Time</th>
-                <th class="px-2 py-1 text-left">Lat</th>
-                <th class="px-2 py-1 text-left">Lon</th>
-                <th class="px-2 py-1 text-left">Mode</th>
-                <th class="px-2 py-1 text-left">Dist</th>
-                <th class="px-2 py-1 text-left">Mesh</th>
-                <th class="px-2 py-1 text-left">Service</th>
-                <th class="px-2 py-1 text-left">Log</th>
-              </tr>
-            </thead>
-            <tbody id="logBody" class="divide-y divide-slate-800 text-slate-400"></tbody>
-          </table>
         </div>
       </section>
 
@@ -199,11 +103,6 @@
         </div>
       </section>
 
-      <!-- Debug -->
-      <section>
-        <div class="text-xs italic text-slate-400" id="debugConsole">
-        </div>
-      </section>
     </div>
   </main>
 

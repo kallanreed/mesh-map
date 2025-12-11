@@ -86,6 +86,14 @@ export function pushMap(map, key, value) {
     map.set(key, [value]);
 }
 
+export function getOrAdd(map, key, value) {
+  const v = map.get(key);
+  if (v) return v;
+  
+  map.set(key, value);
+  return value;
+}
+
 export function sigmoid(value, scale = 0.25, center = 0) {
   const g = scale * (value - center)
   return 1 / (1 + Math.exp(-g));

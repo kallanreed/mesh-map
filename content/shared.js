@@ -391,6 +391,12 @@ function pushMap(map, key, value) {
   else
     map.set(key, [value]);
 }
+function getOrAdd(map, key, value) {
+  const v = map.get(key);
+  if (v) return v;
+  map.set(key, value);
+  return value;
+}
 function sigmoid(value, scale = 0.25, center = 0) {
   const g = scale * (value - center);
   return 1 / (1 + Math.exp(-g));
@@ -426,6 +432,7 @@ export {
   coverageKey,
   fromTruncatedTime,
   export_geo as geo,
+  getOrAdd,
   haversineMiles,
   isValidLocation,
   maxDistanceMiles,
