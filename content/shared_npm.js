@@ -1,6 +1,7 @@
 import geo from 'ngeohash';
+import aes from 'aes-js';
 
-export { geo };  // export the ngeohash API.
+export { aes, geo };  // export the ngeohash API.
 
 // Generates the key for a sample given lat/lon.
 export function sampleKey(lat, lon) {

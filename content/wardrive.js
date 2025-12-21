@@ -1,8 +1,14 @@
-import { WebBleConnection, Constants } from "/content/mc/index.js";
 import {
+  BufferUtils,
+  Constants,
+  Packet,
+  WebBleConnection
+} from "/content/mc/index.js";
+import BufferReader from "/content/mc/buffer_reader.js";
+import {
+  aes,
   ageInDays,
   centerPos,
-  coverageKey,
   geo,
   isValidLocation,
   maxDistanceMiles,
@@ -21,11 +27,18 @@ const sendPingBtn = $("sendPingBtn");
 const autoToggleBtn = $("autoToggleBtn");
 const ignoredRepeaterBtn = $("ignoredRepeaterBtn");
 
+// Channel key is derived from the channel hashtag.
+// Channel hash is derived from the channel key.
+// If you change the channel name, these must be recomputed.
+const wardriveChannelHash = parseInt("e0", 16);
+const wardriveChannelKey = BufferUtils.hexToBytes("4076c315c1ef385fa93f066027320fe5");
 const wardriveChannelName = "#wardrive";
 const refreshTileAge = 1; // Tiles older than this (days) will get pinged again.
 
 // --- Global Init ---
 // Map setup
+const utf8decoder = new TextDecoder(); // default 'utf-8'
+const repeatEmitter = new EventTarget();
 const map = L.map('map', {
   worldCopyJump: true,
   dragging: true,
@@ -245,19 +258,22 @@ function addPingHistory(ping) {
 }
 
 function addPingMarker(ping) {
-  const color =
-    ping.heard === true
-      ? '#398821' // Hit - Green
-      : ping.heard === false
-        ? '#E04748' // Miss - Red
-        : "#999999"; // Unknown - Gray
+  function getPingColor(p) {
+    if (p.heard === true)
+      return '#398821' // Observed - Green
+    if (p.rpt)
+      return '#FEAA2C' // Repeated - Orange
+    if (p.heard === false)
+      return '#E04748' // Miss - Red
+    return "#999999"; // Unknown - Gray
+  }
 
   const pos = posFromHash(ping.hash);
   const pingMarker = L.circleMarker(pos, {
     radius: 4,
     weight: 0.75,
     color: "white",
-    fillColor: color,
+    fillColor: getPingColor(ping),
     fillOpacity: 1,
     pane: "markerPane",
     className: "marker-shadow"
@@ -452,6 +468,32 @@ async function ensureWardriveChannel() {
 }
 
 // --- Ping logic ---
+async function listenForRepeat(message, timeoutMs = 1000) {
+  return new Promise((resolve, reject) => {
+    const on = e => {
+      const detail = e.detail;
+      if (detail.text?.endsWith(message)) {
+        cleanup();
+        resolve(detail);
+      } else {
+        log(`Ignored repeat ${JSON.stringify(detail)}`);
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("timeout"));
+    }, timeoutMs)
+
+    function cleanup() {
+      repeatEmitter.removeEventListener("repeat", on);
+      if (timeout) clearTimeout(timeout);
+    }
+
+    repeatEmitter.addEventListener("repeat", on);
+  });
+}
+
 async function sendPing({ auto = false } = {}) {
   if (!state.connection) {
     setStatus("Not connected", "text-red-300");
@@ -513,12 +555,30 @@ async function sendPing({ auto = false } = {}) {
     return;
   }
 
+  let repeat = null;
+  try {
+    repeat = await listenForRepeat(text);
+    log(`Heard repeat from ${repeat.repeater}`);
+  } catch {
+    log("Didn't hear a repeat in time, assuming lost.");
+  }
+
   // Send sample to service.
   try {
+    const data = { lat, lon };
+    if (repeat) {
+      data.rpt = repeat.repeater;
+      if (!repeat.hitMobileRepeater) {
+        // Don't include signal info when using a mobile repeater.
+        data.snr = repeat.lastSnr;
+        data.rssi = repeat.lastRssi;
+      }
+    }
+
     await fetch("/put-sample", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat, lon }),
+      body: JSON.stringify(data),
     });
   } catch (e) {
     console.error("Service POST failed", e);
@@ -535,6 +595,10 @@ async function sendPing({ auto = false } = {}) {
     const sample = await getSample(sampleId);
     const ping = { hash: sampleId };
 
+    if (repeat) {
+      ping.rpt = repeat.repeater;
+    }
+
     if (sample) {
       ping.heard = sample.path?.length > 0;
       const age = ageInDays(sample.time);
@@ -544,7 +608,7 @@ async function sendPing({ auto = false } = {}) {
 
     addCoverageBox(tileId);
     addPingHistory(ping);
-  }, 3500);
+  }, 2500);
 }
 
 // --- UI ---
@@ -642,8 +706,10 @@ async function handleConnect() {
     const connection = await WebBleConnection.open();
     state.connection = connection;
 
+    // Add handlers
     connection.on("connected", onConnected);
     connection.on("disconnected", onDisconnected);
+    connection.on(Constants.PushCodes.LogRxData, onLogRxData);
   } catch (e) {
     console.error("Failed to open BLE connection", e);
     setStatus("Failed to connect", "text-red-300");
@@ -700,12 +766,74 @@ async function onConnected() {
 function onDisconnected() {
   stopAutoPing();
 
+  // Remove handlers
+  state.connection.off("connected", onConnected);
+  state.connection.off("disconnected", onDisconnected);
+  state.connection.off(Constants.PushCodes.LogRxData, onLogRxData);
+
   deviceInfoEl.textContent = "";
   state.connection = null;
   state.wardriveChannel = null;
 
   updateControlsForConnection(false);
   setStatus("Disconnected", "text-red-300");
+}
+
+function onLogRxData(frame) {
+  const lastSnr = frame.lastSnr;
+  const lastRssi = frame.lastRssi;
+  let hitMobileRepeater = false;
+  const packet = Packet.fromBytes(frame.raw);
+
+  // Only care about flood messages to the wardrive channel.
+  if (!packet.isRouteFlood()
+    || packet.getPayloadType() != Packet.PAYLOAD_TYPE_GRP_TXT
+    || packet.path.length == 0)
+    return;
+
+  // First repeater (ignoring mobile repeater).
+  let firstRepeater = packet.path[0].toString(16);
+  if (firstRepeater === state.ignoredId) {
+    firstRepeater = packet.path[1]?.toString(16);
+    hitMobileRepeater = true;
+  }
+
+  // No valid path.
+  if (firstRepeater === undefined)
+    return;
+
+  const reader = new BufferReader(packet.payload);
+  const groupHash = reader.readByte();
+  const mac = reader.readBytes(2); // Validate?
+  const encrypted = reader.readRemainingBytes();
+
+  // Invalid data for AES.
+  if (encrypted.length % 16 !== 0)
+    return;
+
+  // Definitely not to wardrive channel.
+  if (groupHash !== wardriveChannelHash)
+    return;
+
+  // Probably for wardrive, give it a try.
+  try {
+    const aesEcb = new aes.ModeOfOperation.ecb(wardriveChannelKey);
+    const decrypted = aesEcb.decrypt(encrypted);
+    const msgReader = new BufferReader(decrypted);
+    msgReader.readBytes(5); // Skip Timestamp and Flags, remove trailing null padding.
+    const msgText = utf8decoder.decode(msgReader.readRemainingBytes()).replace(/\0/g, '');
+    repeatEmitter.dispatchEvent(new CustomEvent("repeat", {
+      detail: {
+        repeater: firstRepeater,
+        text: msgText,
+        hitMobileRepeater: hitMobileRepeater,
+        lastSnr: lastSnr,
+        lastRssi: lastRssi
+      }
+    }));
+  } catch (e) {
+    log("Failed to decrypt message:", e);
+  }
 }
 
 // --- Event bindings ---
