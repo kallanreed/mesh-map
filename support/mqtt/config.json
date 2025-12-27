@@ -3,7 +3,7 @@
   "mqtt_port": 443,
   "mqtt_username": "<USERNAME>",
   "mqtt_password": "<PASSWORD>",
-  "mqtt_topic": "meshcore/SEA/+/packets",
+  "mqtt_topic": "meshcore/TPA/+/packets",
 
   "service_host": "https://mesh-map-89j.pages.dev",
   "center_position": [27.7700, -82.3899],
