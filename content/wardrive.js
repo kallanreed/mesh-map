@@ -23,6 +23,7 @@ const $ = id => document.getElementById(id);
 const statusEl = $("status");
 const deviceInfoEl = $("deviceInfo");
 const ignoredRepeaterId = $("ignoredRepeaterId");
+const sendRadioNameCB = $("sendRadioNameCB");
 
 const connectBtn = $("connectBtn");
 const sendPingBtn = $("sendPingBtn");
@@ -135,15 +136,17 @@ function log(msg) {
 // --- State ---
 const PING_HISTORY_ID_KEY = "meshcoreWardrivePingHistoryV1"
 const IGNORED_ID_KEY = "meshcoreWardriveIgnoredIdV1"
+const SETTINGS_ID_KEY = "meshcoreWardriveSettingsV1"
 
 const state = {
   connection: null,
-  selfInfo: null,
+  radioName: null,
   wardriveChannel: null,
   running: false,
   autoTimerId: null,
   wakeLock: null,
   ignoredId: null, // Allows a repeater to be ignored.
+  sendRadioName: false,
   pings: [],
   tiles: new Map(),
   following: true,
@@ -298,19 +301,54 @@ function redrawPingHistory() {
   state.pings.forEach(addPingMarker);
 }
 
-// --- Ignored Id ---
-function loadIgnoredId() {
+// --- Saved Settings ---
+// One-time migration to new settings object.
+function migrateSettings() {
   try {
-    state.ignoredId = null;
     const id = localStorage.getItem(IGNORED_ID_KEY);
-    state.ignoredId = id ? id : null;
+    if (id) {
+      state.ignoredId = id;
+    }
+    saveSettings();
+    localStorage.removeItem(IGNORED_ID_KEY);
   } catch (e) {
-    console.warn("Failed to load ignored id", e);
+    console.warn("Failed to migrate ignored id", e);
   }
-
-  updateIgnoreId();
 }
 
+function loadSettings() {
+  try {
+    let settingsStr = localStorage.getItem(SETTINGS_ID_KEY);
+
+    if (settingsStr === null) {
+      migrateSettings();
+      settingsStr = localStorage.getItem(SETTINGS_ID_KEY);
+    }
+    const settings = JSON.parse(settingsStr)
+    state.ignoredId = settings.ignoredId ?? null;
+    state.sendRadioName = settings.sendRadioName ?? false;
+    refreshSettingsUI();
+  } catch (e) {
+    console.warn("Failed to load settings", e);
+    localStorage.removeItem(SETTINGS_ID_KEY);
+  }
+}
+
+function saveSettings() {
+  const settings = {
+    ignoredId: state.ignoredId,
+    sendRadioName: state.sendRadioName
+  };
+
+  localStorage.setItem(SETTINGS_ID_KEY, JSON.stringify(settings));
+}
+
+function refreshSettingsUI() {
+  ignoredRepeaterId.innerText = state.ignoredId ?? "<none>";
+  sendRadioNameCB.checked = state.sendRadioName;
+}
+
+// --- Ignored Id ---
 function promptIgnoredId() {
   const id = prompt("Enter repeater id to ignore.", state.ignoredId ?? '');
 
@@ -324,12 +362,8 @@ function promptIgnoredId() {
   }
 
   state.ignoredId = id ? id : null;
-  localStorage.setItem(IGNORED_ID_KEY, id);
-  updateIgnoreId();
-}
-
-function updateIgnoreId() {
-  ignoredRepeaterId.innerText = state.ignoredId ?? "<none>";
+  saveSettings();
+  refreshSettingsUI();
 }
 
 // --- Geolocation ---
@@ -588,6 +622,10 @@ async function sendPing({ auto = false } = {}) {
       }
     }
 
+    if (state.sendRadioName) {
+      data.sender = state.radioName;
+    }
+
     await fetch("/put-sample", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -754,10 +792,8 @@ async function onConnected() {
     }
 
     const selfInfo = await state.connection.getSelfInfo();
-    state.selfInfo = selfInfo;
-    deviceInfoEl.textContent = selfInfo?.name
-      ? `${selfInfo.name}`
-      : "[No device]";
+    state.radioName = selfInfo?.name ?? null;
+    deviceInfoEl.textContent = state.radioName ?? "[No device]";
 
     setStatus("Connected", "text-emerald-300");
 
@@ -873,6 +909,11 @@ autoToggleBtn.addEventListener("click", async () => {
 
 ignoredRepeaterBtn.addEventListener("click", promptIgnoredId);
 
+sendRadioNameCB.addEventListener("change", e => {
+  state.sendRadioName = e.target.checked;
+  saveSettings();
+});
+
 // Automatically release wake lock when the page is hidden.
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
@@ -900,8 +941,8 @@ if ('bluetooth' in navigator) {
 
 export async function onLoad() {
   try {
+    loadSettings();
     loadPingHistory();
-    loadIgnoredId();
     updateControlsForConnection(false);
     updateAutoButton();
     redrawPingHistory();
