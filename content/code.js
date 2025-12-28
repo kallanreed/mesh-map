@@ -88,7 +88,7 @@ mapControl.onAdd = m => {
       <div class="mesh-control-row">
         <label>
           Show Samples:
-          <input type="checkbox" id="show-samples" />
+          <input type="checkbox" id="show-samples" disabled />
         </label>
       </div>
       <div class="mesh-control-row">
