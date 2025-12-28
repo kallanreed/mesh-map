@@ -59,11 +59,15 @@
   <h2 class="mb-2 text-xl text-slate-100">How it works</h2>
   <div class="mb-2 pl-4 text-base">
     You send your location to #wardrive in the format "lat.xxxx lon.yyyy".
-    If the bot receives your location, a new point is added to the map indicating
+    If your location is received, a new point is added to the map indicating
     you can reach the mesh at that spot. If you want to also log places where you
     can't reach the mesh, there's a helpful web app you can run on your phone to
-    automate the process. To be "heard", your message repeats must be heard by
-    KQ4WAA [6a].
+    automate the process. To be considered reachable, your message repeats have to
+    be observed by one of the following MQTT observers.
+    <ul class="pl-4 text-sm list-disc">
+      <li>KQ4WAA [6a]</li>
+      <li>TF-Room [5f]</li>
+    </ul>
   </div>
   <div class="mb-2 pl-4 text-base">
     WA7JNJ Radio made a nice
@@ -80,7 +84,9 @@
     automatically. It also sends your ping location to the service so that
     misses are also automatically logged. You can send single pings or enable
     'auto mode' which will send a ping when you enter a coverage tile that hasn't
-    been updated recently.
+    been updated recently. The app will also listen for a repeat and send the
+    repeater and radio stats to the service. This allows you to find repeaters
+    that aren't getting repeated by the larger mesh.
   </div>
 
   <h3 class="mb-2 pl-4 text-lg text-slate-100">Using the Wardrive app</h3>
@@ -89,11 +95,17 @@
     <ul class="mb-2 pl-4 text-sm list-disc">
       <li>You must allow access to Bluetooth and Location in your browser.</li>
       <li>Your companion radio must add the #wardrive channel. The app will help with that.</li>
-      <li>It does not work in Safari.
+      <li>It does not work in Safari or most vendor-modded Android browsers.
         <ul class="pl-4 text-sm list-disc">
-          <li>On Macos, use Edge or Chrome.</li>
+          <li>On MacOS, use Edge or Chrome.</li>
           <li>On iOS, use the <a class="underline text-sky-300" target="_blank"
-              href="https://apps.apple.com/us/app/bluefy-web-ble-browser/id1492822055">Bluefy app</a></li>
+              href="https://apps.apple.com/us/app/bluefy-web-ble-browser/id1492822055">Bluefy app</a>
+          </li>
+          <li>On Android use <a class="underline text-sky-300" target="_blank"
+              href="https://play.google.com/store/apps/details?id=com.microsoft.emmx">Edge</a>
+            or <a class="underline text-sky-300" target="_blank"
+              href="https://play.google.com/store/apps/details?id=com.android.chrome">Chrome</a>.
+          </li>
         </ul>
       </li>
       <li>You have to disconnect from the MeshCore app in order to connect to your radio. BLE only allows one
