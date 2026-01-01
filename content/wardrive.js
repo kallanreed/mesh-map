@@ -593,9 +593,10 @@ async function sendPing({ auto = false } = {}) {
   if (state.ignoredId !== null) text += ` ${state.ignoredId}`;
 
   try {
-    // Don't need to send an rx-sample for this tile because
-    // this sends a normal sample with the same data.
-    pushRxHistory(tileId);
+    // Removed: data is cheap this helps fill the RxLog map.
+    // // Don't need to send an rx-sample for this tile because
+    // // this sends a normal sample with the same data.
+    // pushRxHistory(tileId);
 
     // Send mesh message: "<lat> <lon> [<id>]".
     await state.connection.sendChannelTextMessage(state.channel.channelIdx, text);
