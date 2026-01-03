@@ -1053,6 +1053,11 @@ var w = function(r2) {
 };
 
 // content/shared_npm.js
+var centerPos = [47.6205, -122.3494];
+var maxDistanceMiles = 150;
+var dayInMillis = 24 * 60 * 60 * 1e3;
+var TIME_TRUNCATION = 1e5;
+var MAX_VALID_RSSI = -31;
 function geohash8(lat, lon) {
   return import_ngeohash.default.encode(lat, lon, 8);
 }
@@ -1062,6 +1067,9 @@ function geohash6(lat, lon) {
 function posFromHash(geohash) {
   const { latitude: lat, longitude: lon } = import_ngeohash.default.decode(geohash);
   return [lat, lon];
+}
+function isValidRssi(rssi) {
+  return rssi == null || rssi <= MAX_VALID_RSSI;
 }
 function haversineMiles(a2, b2) {
   const R = 3958.8;
@@ -1073,8 +1081,6 @@ function haversineMiles(a2, b2) {
   const h2 = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h2));
 }
-var centerPos = [47.6205, -122.3494];
-var maxDistanceMiles = 150;
 function isValidLocation(p2) {
   const [lat, lon] = p2;
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
@@ -1104,7 +1110,6 @@ function parseLocation(latStr, lonStr) {
   }
   return [lat, lon];
 }
-var dayInMillis = 24 * 60 * 60 * 1e3;
 function ageInDays(time) {
   return (Date.now() - new Date(time)) / dayInMillis;
 }
@@ -1125,7 +1130,6 @@ function sigmoid(value, scale = 0.25, center = 0) {
   const g2 = scale * (value - center);
   return 1 / (1 + Math.exp(-g2));
 }
-var TIME_TRUNCATION = 1e5;
 function truncateTime(time) {
   return Math.round(time / TIME_TRUNCATION);
 }
@@ -1210,6 +1214,7 @@ export {
   getPathEntry,
   haversineMiles,
   isValidLocation,
+  isValidRssi,
   lerp,
   maxDistanceMiles,
   or,

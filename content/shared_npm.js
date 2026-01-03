@@ -4,6 +4,16 @@ import { colord } from 'colord';
 
 export { aes, geo };  // export APIs.
 
+// --- Exported Constants ---
+// The center position to use for point filtering.
+export const centerPos = [47.6205, -122.3494];
+export const maxDistanceMiles = 150;
+export const dayInMillis = 24 * 60 * 60 * 1000;
+
+// About 1 minute accuracy.
+const TIME_TRUNCATION = 100000;
+const MAX_VALID_RSSI = -31;
+
 // Generates 8 char geohash for the given lat/lon.
 export function geohash8(lat, lon) {
   return geo.encode(lat, lon, 8);
@@ -18,6 +28,10 @@ export function geohash6(lat, lon) {
 export function posFromHash(geohash) {
   const { latitude: lat, longitude: lon } = geo.decode(geohash);
   return [lat, lon];
+}
+
+export function isValidRssi(rssi) {
+  return rssi == null || rssi <= MAX_VALID_RSSI; 
 }
 
 // Haversine distance between two [lat, lon] points, in miles.
@@ -37,10 +51,6 @@ export function haversineMiles(a, b) {
 
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-
-// The center position to use for point filtering.
-export const centerPos = [47.6205, -122.3494];
-export const maxDistanceMiles = 150;
 
 export function isValidLocation(p) {
   const [lat, lon] = p;
@@ -81,8 +91,6 @@ export function parseLocation(latStr, lonStr) {
   return [lat, lon];
 }
 
-export const dayInMillis = 24 * 60 * 60 * 1000; 
-
 export function ageInDays(time) {
   return (Date.now() - new Date(time)) / dayInMillis;
 }
@@ -108,9 +116,6 @@ export function sigmoid(value, scale = 0.25, center = 0) {
   const g = scale * (value - center)
   return 1 / (1 + Math.exp(-g));
 }
-
-// About 1 minute accuracy.
-const TIME_TRUNCATION = 100000;
 
 export function truncateTime(time) {
   return Math.round(time / TIME_TRUNCATION);

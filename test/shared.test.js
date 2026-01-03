@@ -103,3 +103,20 @@ test('getPathEntry with invalid positive index is undef', () => {
 test('getPathEntry with invalid negative index is undef', () => {
   expect(util.getPathEntry([1, 2, 3], -4)).toBe(undefined);
 });
+
+// --- isValidRssi ---
+test('isValidRssi returns true for nullish values', () => {
+  expect(util.isValidRssi()).toBe(true);
+  expect(util.isValidRssi(null)).toBe(true);
+  expect(util.isValidRssi(undefined)).toBe(true);
+});
+
+test('isValidRssi returns true for valid values', () => {
+  expect(util.isValidRssi(-128)).toBe(true);
+  expect(util.isValidRssi(-31)).toBe(true);
+});
+
+test('isValidRssi returns true for invalid values', () => {
+  expect(util.isValidRssi(-30)).toBe(false);
+  expect(util.isValidRssi(0)).toBe(false);
+});

@@ -8,6 +8,14 @@ export async function onRequest(context) {
   const request = context.request;
   const data = await request.json();
 
+  // If the RSSI it really high, it's probably from a mobile repeater.
+  // Ignore the radio stats and path in that case.
+  if (!isValidRssi(data.rssi)) {
+    data.rssi = null;
+    data.snr = null;
+    data.path = [];
+  }
+
   // TODO: Pass in geohash directly.
   const [lat, lon] = parseLocation(data.lat, data.lon);
   const hash = geohash8(lat, lon);

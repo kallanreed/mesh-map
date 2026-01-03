@@ -1,5 +1,6 @@
 import {
-  assertValidGeohash
+  assertValidGeohash,
+  isValidRssi
 } from '../content/shared.js'
 
 export async function onRequest(context) {
@@ -10,6 +11,9 @@ export async function onRequest(context) {
   const hash = data.hash;
   const time = Date.now();
   const info = data.info;
+
+  if (!isValidRssi(info.rssi))
+    throw new Error("RSSI too high, likely from mobile repeater.");
 
   if (info == null || info.time == null || info.rssi == null
     || info.snr == null || info.repeater == null || info.time === 0)
