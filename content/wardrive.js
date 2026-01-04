@@ -251,12 +251,6 @@ function loadPingHistory() {
     state.pings = [];
     const data = localStorage.getItem(PING_HISTORY_ID_KEY);
     state.pings = JSON.parse(data || '[]');
-
-    // Upgrade ping data if needed.
-    if (state.pings.length > 0 && !state.pings[0].hasOwnProperty("hash")) {
-      state.pings = state.pings.map(x => ({ hash: geohash8(x[0], x[1]) }));
-      savePingHistory();
-    }
   } catch (e) {
     console.warn("Failed to load ping history", e);
   }
@@ -271,6 +265,11 @@ function savePingHistory() {
 }
 
 function addPingHistory(ping) {
+  // Don't add pings for the exact same location.
+  const existing = state.pings.find(p => p.hash == ping.hash);
+  if (existing)
+    return;
+
   addPingMarker(ping);
   state.pings.push(ping);
   savePingHistory();
@@ -278,6 +277,8 @@ function addPingHistory(ping) {
 
 function addPingMarker(ping) {
   function getPingColor(p) {
+    if (p.rxLog)
+      return '#A126C3' // RxLog - Violet
     if (p.observed)
       return '#398821' // Observed - Green
     if (p.heard)
@@ -288,7 +289,7 @@ function addPingMarker(ping) {
 
   const pos = posFromHash(ping.hash);
   const pingMarker = L.circleMarker(pos, {
-    radius: 4,
+    radius: ping.rxLog ? 3 : 4, // Smaller RxLog pings.
     weight: 0.75,
     color: "white",
     fillColor: getPingColor(ping),
@@ -862,8 +863,10 @@ async function trySendRxSample(repeater, lastSnr, lastRssi) {
     log("RxSample: Outside coverage area");
     return;
   }
-  const hash = geohash6(lat, lon);
+
   // Track history per (tile hash, repeater id).
+  // It's interesting to know all of the repeaters that can be heard in a tile.
+  const hash = geohash6(lat, lon);
   const historyKey = `${hash}#${repeater}`;
 
   // Does this tile need a sample?
@@ -892,6 +895,7 @@ async function trySendRxSample(repeater, lastSnr, lastRssi) {
     });
 
     pushRxHistory(historyKey);
+    addPingHistory({ hash: geohash8(lat, lon), rxLog: true });
   } catch (e) {
     console.error("RxSample: Service POST failed", e);
   }
