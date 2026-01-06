@@ -17,9 +17,9 @@ import {
 const map = L.map('map', {
   worldCopyJump: true,
   zoomControl: false,
-}).setView(centerPos, 11);
+}).setView(centerPos, 10);
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 16,
+  maxZoom: 18,
   minZoom: 8,
   attribution: '© OpenStreetMap contributors | <a href="/howto" target="_blank">Contribute</a>'
 }).addTo(map);
