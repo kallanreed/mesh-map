@@ -1,6 +1,7 @@
 import * as util from '../content/shared.js';
 
-// Pull all the live data into the local emulator.
+// Pull live data into the local emulator.
+// NB: This is for the old KV style, use SQL export for new builds.
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const result = {
