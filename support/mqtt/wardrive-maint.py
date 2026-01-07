@@ -1,6 +1,6 @@
 import requests
 
-HOST = "https://mesh-map.jntconnections.com"
+HOST = "https://mesh-map89j.pages.dev"
 
 def consolidate():
   try:
