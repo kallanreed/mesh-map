@@ -4,6 +4,7 @@ Description=MeshCore Coverage Maintenance
 [Timer]
 OnCalendar=Hourly
 Persistent=true
+Unit=wardrive-maint.service
 
 [Install]
 WantedBy=timers.target
