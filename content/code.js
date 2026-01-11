@@ -505,17 +505,27 @@ function getCoverageStyle(coverage) {
 function rxCoverageMarker(c) {
   const [minLat, minLon, maxLat, maxLon] = geo.decode_bbox(c.hash);
   const updated = new Date(c.time);
+  const rptrTable = c.rptr.map(r => {
+    return `<div class="rx-repeater-table-row">
+        <span>${r.id}</span>
+        <span>${r.snr_avg}</span>
+        <span>${r.rssi_avg}</span>
+        <span>${r.count}</span>
+      </div>`;
+  });
   const style = getCoverageStyle(c);
   const rect = L.rectangle([[minLat, minLon], [maxLat, maxLon]], style);
   const details = `
     <div><b>${c.hash}</b>
     <span class="text-xs">${maxLat.toFixed(4)},${maxLon.toFixed(4)}</span></div>
-    <div>Samples: ${c.count}</div>
     <div>SNR: ${c.snr.toFixed(2)} · RSSI: ${c.rssi.toFixed(2)}</div>
-    ${c.rptr.length > 0 ? `<div>Repeaters: ${c.rptr.join(', ')}</div>` : ''}
-    <div class="text-xs">
-    ${c.hrd ? `<div>Updated: ${shortDateStr(updated)}</div>` : ''}
-    </div>`;
+    <div class="rx-repeater-table">
+    <div class="rx-repeater-table-row header">
+      <span>Id</span><span>SNR</span><span>RSSI</span><span>#</span>
+    </div>
+    ${rptrTable.join('')}
+    </div>
+    <div class="text-xs">Updated: ${shortDateStr(updated)}</div>`;
 
   rect.coverage = c;
   rect.bindPopup(details, { maxWidth: 320 });
@@ -786,7 +796,7 @@ async function renderPassive() {
     coverageLayer.addLayer(rxCoverageMarker(c));
 
     c.rptr.forEach(r => {
-      const candidateRepeaters = idToRepeaters.get(r);
+      const candidateRepeaters = idToRepeaters.get(r.id);
       if (candidateRepeaters === undefined)
         return;
 
