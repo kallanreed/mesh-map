@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS samples (
   rssi REAL CHECK (rssi IS NULL OR typeof(rssi) = 'real'),
   snr  REAL CHECK (snr  IS NULL OR typeof(snr)  = 'real'),
   observed  INTEGER NOT NULL DEFAULT 0 CHECK (observed IN (0, 1)),
+  mesh_ids  TEXT,
   repeaters TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_samples_time ON samples(time);
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS coverage (
   lost INTEGER NOT NULL DEFAULT 0,
   rssi REAL CHECK (rssi IS NULL OR typeof(rssi) = 'real'),
   snr  REAL CHECK (snr  IS NULL OR typeof(snr)  = 'real'),
+  mesh_ids  TEXT,
   repeaters TEXT NOT NULL DEFAULT '[]',
   entries TEXT NOT NULL DEFAULT '[]'
 );

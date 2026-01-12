@@ -25,6 +25,7 @@ function consolidateSamples(samples, cutoffTime) {
     rssi: null,
     lastObserved: 0,
     lastHeard: 0,
+    mesh_ids: [],
     repeaters: [],
   };
 
@@ -43,6 +44,13 @@ function consolidateSamples(samples, cutoffTime) {
       uberSample.lastObserved = Math.max(s.time, uberSample.lastObserved);
     }
 
+    const mesh_ids = JSON.parse(s.mesh_ids || '[]');
+    mesh_ids.forEach(id => {
+      id = id.toUpperCase();
+      if (!uberSample.mesh_ids.includes(id))
+        uberSample.mesh_ids.push(id);
+    });
+
     const repeaters = JSON.parse(s.repeaters || '[]');
     if (s.observed || repeaters.length > 0) {
       uberSample.heard++;
@@ -52,6 +60,7 @@ function consolidateSamples(samples, cutoffTime) {
     }
 
     repeaters.forEach(p => {
+      p = p.toLowerCase();
       if (!uberSample.repeaters.includes(p))
         uberSample.repeaters.push(p);
     });
@@ -100,9 +109,11 @@ async function mergeCoverage(key, samples, DB) {
     lost: 0,
     rssi: null,
     snr: null,
+    mesh_ids: [],
     repeaters: [],
     entries: entries,
   };
+  const meshIdSet = new Set();
   const repeaterSet = new Set(prevRepeaters);
   entries.forEach(e => {
     updatedRow.lastObserved = Math.max(updatedRow.lastObserved, e.lastObserved);
@@ -112,13 +123,15 @@ async function mergeCoverage(key, samples, DB) {
     updatedRow.lost += e.lost;
     updatedRow.rssi = util.definedOr(Math.max, updatedRow.rssi, e.rssi);
     updatedRow.snr = util.definedOr(Math.max, updatedRow.snr, e.snr);
-    e.repeaters.forEach(r => repeaterSet.add(r.toLowerCase()));
+    e.mesh_ids?.forEach(id => meshIdSet.add(id));
+    e.repeaters.forEach(r => repeaterSet.add(r));
   });
+  updatedRow.mesh_ids = [...meshIdSet];
   updatedRow.repeaters = [...repeaterSet];
 
   await DB.prepare(`
     INSERT OR REPLACE INTO coverage
-      (hash, time, lastObserved, lastHeard, observed, heard, lost, rssi, snr, repeaters, entries)
+      (hash, time, lastObserved, lastHeard, observed, heard, lost, rssi, snr, mesh_ids, repeaters, entries)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       updatedRow.hash,
@@ -130,6 +143,7 @@ async function mergeCoverage(key, samples, DB) {
       updatedRow.lost,
       updatedRow.rssi,
       updatedRow.snr,
+      JSON.stringify(updatedRow.mesh_ids),
       JSON.stringify(updatedRow.repeaters),
       JSON.stringify(updatedRow.entries)
     ).run();
