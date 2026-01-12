@@ -75,7 +75,20 @@ Leave the binding names alone. Those are the names used in the code.
 8) Commit your changes to git and push. Cloudflare should pick up your changes
 and deploy to your Pages app.
 
-### Migration
+### Upgrade & Migration
+When you sync the upstream, don't forget to update the MQTT python scripts if
+there were changes. Changes here are rare, but are often stability-related.
+
+#### DB Upgrades
+Sometimes the DB schema needs to be adjusted. If you're starting fresh, everything
+should be set up when you run the schema.sql. If you have existing data that you don't
+want to lose, you will need to run the upgrade_000.sql scripts, *in order*. There's no
+DB versioning currently so you'll need to know what was the last upgrade you ran and
+run everything after that. To help you determine whether you need to run an upgrade,
+here's a change log.
+* update_001.sql -- adds columns needed for regional mesh name support.
+
+#### Old KV Version
 If you have data in KV namespaces (previously used), you can migrate your existing data into the database.
 This assumes you still have the bindings for COVERAGE, REPEATERS, SAMPLES, and ARCHIVE in your wrangler.jsonc.
 
@@ -108,16 +121,18 @@ the services running, use journalctl to watch the logs.
 
 ### Files to modify
 * config.json has per-instance config that you need to modify.
-  * mqtt_host - where the MQTT client will connect.
-  * mqtt user/pass - creds for the MQTT client to use to connect to the host.
-  * service_host - your Pages app host.
-  * center_pos - the center of your map.
-  * valid_dist - radius in miles considered "in" your region.
-  * channel hash/secret - the mesh channel to read from. "#wardrive" by default and feel free to use that.
-  * watched_observers - the repeater names of the observers that are considered
+  * `mqtt_host` - where the MQTT client will connect.
+  * `mqtt user/pass` - creds for the MQTT client to use to connect to the host.
+  * `service_host` - your Pages app host.
+  * `center_pos` - the center of your map.
+  * `valid_dist` - radius in miles considered "in" your region.
+  * `channel hash/secret` - the mesh channel to read from. "#wardrive" by default and feel free to use that.
+  * `watched_observers` - the repeater names of the observers that are considered
   "official". Remember, the point is to pick observers that indicate a message was
   shared with your whole region. If an observer is off in its own little corner, the
   map would show a green tile for an area that wouldn't reach the whole mesh.
+  * `mesh_observers` - the same purpose as `watched_observers` but allows you to group
+  observers by "mesh". This value is used instead of `watched_observers` if both are present. *If you only have a single, connected mesh in your map region, just use `watched_observers` instead.
 
 ### Python Setup
 1) Set up a virtual environment `python -m venv .` and activate it `source ./bin/activate`
