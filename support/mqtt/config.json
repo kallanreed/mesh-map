@@ -1,8 +1,8 @@
 {
-  "mqtt_host": "<mqtt-service-host>",
+  "mqtt_host": "mcmqtt.jntconnections.com",
   "mqtt_port": 443,
-  "mqtt_username": "<USERNAME>",
-  "mqtt_password": "<PASSWORD>",
+  "mqtt_username": "[username]",
+  "mqtt_password": "[password]",
   "mqtt_topic": "meshcore/+/+/packets",
 
   "service_host": "https://mesh-map-89j.pages.dev",
@@ -15,42 +15,28 @@
   "_observers_note": "Use mesh_observers XOR watched_observers. mesh_observers takes precedence.",
   "mesh_observers": [
     {
-      "mesh_name": "OLM",
+      "mesh_name": "TPA",
       "observers": [
-        "OlyMesh_SE"
+        "TF-Room"
       ]
     },
     {
-      "mesh_name": "PDX",
+      "mesh_name": "JAX",
       "observers": [
-        "Endymion-G2",
-        "HudsonsBay",
-        "Woodward Repeater"
+        "Millers Creek - JAXMesh"
       ]
     },
     {
-      "mesh_name": "PWT",
+      "mesh_name": "PGD",
       "observers": [
-        "Discovery MQTT",
-        "Red Repeater"
+        "N2AWS - MeshMapper",
+        "TownEstates"
       ]
     },
     {
-      "mesh_name": "SEA",
+      "mesh_name": "SRQ",
       "observers": [
-        "N7JMV-NEW-RP",
-        "N7JMV/WA7LAW-EVERETT-RP",
-        "Powerline Trail",
-        "PugetMesh Haystack",
-        "W7ITL-PTDefiance-IKOKA",
-        "WW7STR/PugetMesh Cougar"
-      ]
-    },
-    {
-      "mesh_name": "YVR",
-      "observers": [
-        "Yaletown Repeater",
-        "YVR//Seafair"
+        "Beanfield Observer1"
       ]
     }
   ],
@@ -59,6 +45,7 @@
     "TF-Room",
     "N2AWS - MeshMapper",
     "TownEstates",
-    "Beanfield Observer 1"
+    "Beanfield Observer1",
+    "Millers Creek - JAXMesh"
   ]
 }
