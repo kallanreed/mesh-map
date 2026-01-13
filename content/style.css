@@ -39,11 +39,6 @@ body,
   inset: 0;
 }
 
-.leaflet-interactive.marker-shadow {
-  /* Ends up being slow to render with thousands of samples. */
-  /*filter: url('#marker-shadow')*/
-}
-
 .repeater-dot {
   width: 16px;
   height: 16px;
@@ -222,4 +217,34 @@ body,
 
 .text-xs {
   font-size: x-small;
+}
+
+.rx-repeater-table {
+  font-size: x-small;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.rx-repeater-table-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 2em 4em 5em 2em;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rx-repeater-table-row:nth-child(even) {
+  background-color: #e5e5e5;
+}
+
+/* right-align numeric columns */
+.rx-repeater-table-row span:nth-child(2),
+.rx-repeater-table-row span:nth-child(3),
+.rx-repeater-table-row span:nth-child(4) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rx-repeater-table-row.header {
+  font-weight: 700;
 }

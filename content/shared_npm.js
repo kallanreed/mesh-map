@@ -1,5 +1,6 @@
 import geo from 'ngeohash';
 import aes from 'aes-js';
+import stc from 'string-to-color';
 import { colord } from 'colord';
 
 export { aes, geo };  // export APIs.
@@ -176,6 +177,10 @@ export function fadeColor(color, amount) {
   const c = colord(color);
   const v = c.toHsv().v;
   return c.desaturate(amount).lighten(amount * (1 - (v / 255))).toHex();
+}
+
+export function getMeshIdColor(meshIds) {
+  return stc(meshIds.join('__'));
 }
 
 export function toHex(num) {

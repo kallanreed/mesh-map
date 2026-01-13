@@ -23,14 +23,17 @@ export async function onRequest(context) {
   const time = Date.now();
   const rssi = data.rssi ?? null;
   const snr = data.snr ?? null;
+  const mesh = data.mesh?.toUpperCase() ?? null;
+  const mesh_ids = mesh ? [mesh] : [];
   const path = (data.path ?? []).map(p => p.toLowerCase());
   const observed = data.observed ?? false;
   const sender = data.sender ?? null
 
+
   await context.env.DB
     .prepare(`
-      INSERT INTO samples (hash, time, rssi, snr, observed, repeaters)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO samples (hash, time, rssi, snr, observed, mesh_ids, repeaters)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(hash) DO UPDATE SET
         time = excluded.time,
         rssi = CASE
@@ -44,6 +47,16 @@ export async function onRequest(context) {
           ELSE MAX(samples.snr, excluded.snr)
         END,
         observed = MAX(samples.observed, excluded.observed),
+        mesh_ids = (
+          SELECT json_group_array(value) FROM (
+            SELECT value
+            FROM json_each(COALESCE(samples.mesh_ids, '[]'))
+            UNION
+            SELECT value
+            FROM json_each(COALESCE(excluded.mesh_ids, '[]'))
+            ORDER BY value
+          )
+        ),
         repeaters = (
           SELECT json_group_array(value) FROM (
             SELECT value FROM json_each(samples.repeaters)
@@ -52,7 +65,7 @@ export async function onRequest(context) {
           )
         )
     `)
-    .bind(hash, time, rssi, snr, observed ? 1 : 0, JSON.stringify(path))
+    .bind(hash, time, rssi, snr, observed ? 1 : 0, JSON.stringify(mesh_ids), JSON.stringify(path))
     .run();
 
   if (sender) {

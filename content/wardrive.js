@@ -31,7 +31,8 @@ const connectBtn = $("connectBtn");
 const sendPingBtn = $("sendPingBtn");
 const autoToggleBtn = $("autoToggleBtn");
 const ignoredRepeaterBtn = $("ignoredRepeaterBtn");
-const rxLogStatusEl = $("rxLogStatus");
+const logoGlowEl = $("logoGlow");
+const logoBrightEl = $("logoBright");
 
 // Channel key is derived from the channel hashtag.
 // Channel hash is derived from the channel key.
@@ -124,6 +125,9 @@ map.on("mousedown touchstart wheel dragstart", () => {
   state.following = false;
   updateFollowButton();
 });
+
+// Use to return UI thread to allow layout/paint.
+const nextPaint = () => new Promise(requestAnimationFrame);
 
 // --- Versioning ---
 const pageLoaded = Date.now();
@@ -284,8 +288,9 @@ function savePingHistory() {
 }
 
 function addPingHistory(ping) {
-  // Don't add pings for the exact same location.
-  const existing = state.pings.find(p => p.hash == ping.hash);
+  // Don't add new pings of the same type at the same location.
+  const existing = state.pings.find(
+    p => p.hash == ping.hash && p.rxLog === ping.rxLog);
   if (existing)
     return;
 
@@ -317,6 +322,7 @@ function addPingMarker(ping) {
     className: "marker-shadow",
     interactive: false
   });
+  pingMarker.ping = ping;
   pingLayer.addLayer(pingMarker);
 }
 
@@ -848,16 +854,19 @@ function onDisconnected() {
 }
 
 // --- RX log handling ---
-function blinkRxLog() {
-  rxLogStatusEl.classList.remove("bg-zinc-500");
-  rxLogStatusEl.classList.add("bg-emerald-400");
+async function blinkRxLog() {
+  logoGlowEl.style.opacity = 1;
+  logoBrightEl.style.opacity = 1;
 
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      rxLogStatusEl.classList.add("bg-zinc-500");
-      rxLogStatusEl.classList.remove("bg-emerald-400");
-    }, 150);
-  });
+  // Wait for two render frames. Sometimes the browser
+  // just does layout and returns before painting.
+  await nextPaint();
+  await nextPaint();
+
+  setTimeout(() => {
+    logoGlowEl.style.opacity = 0;
+    logoBrightEl.style.opacity = 0;
+  }, 300);
 }
 
 function pushRxHistory(key) {
@@ -927,11 +936,17 @@ async function onLogRxData(frame) {
   const lastRssi = frame.lastRssi;
   let hitMobileRepeater = false;
   const packet = Packet.fromBytes(frame.raw);
+  const payloadType = packet.getPayloadType();
 
-  // Only care about flood group messages for RX samples.
-  if (!packet.isRouteFlood()
-    || packet.getPayloadType() != Packet.PAYLOAD_TYPE_GRP_TXT
-    || packet.path.length == 0)
+  // Ignore direct/zero-hop messages.
+  if (!packet.isRouteFlood() || packet.path.length == 0)
+    return;
+
+  // Receiving these payloads is a decent proxy for hearing the mesh.
+  // Adverts are iffy as a proxy, but it's a nice source of packets.
+  if (payloadType != Packet.PAYLOAD_TYPE_GRP_TXT
+    && payloadType != Packet.PAYLOAD_TYPE_TXT_MSG
+    && payloadType != Packet.PAYLOAD_TYPE_ADVERT)
     return;
 
   // Try to get the last hop, ignoring mobile repeaters.
@@ -956,9 +971,13 @@ async function onLogRxData(frame) {
   // NB: It's expected to have invalid RSSI when hitMobileRepeater is true.
   const shouldSendRxStats = !hitMobileRepeater;
   if (shouldSendRxStats) {
-    blinkRxLog();
+    await blinkRxLog();
     await trySendRxSample(lastRepeater, lastSnr, lastRssi);
   }
+
+  // The rest of the code is only interested in message to #wardrive.
+  if (payloadType != Packet.PAYLOAD_TYPE_GRP_TXT)
+    return;
 
   const reader = new BufferReader(packet.payload);
   const groupHash = reader.readByte();
@@ -1060,6 +1079,7 @@ export async function onLoad() {
 
     await startLocationTracking();
   } catch (e) {
-    alert(e);
-  }
+    const stack = e?.stack;
+    alert(`${String(e)}${stack ? `\nStack: ${stack}` : ''}`);
+ }
 }

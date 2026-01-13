@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS samples (
   rssi REAL CHECK (rssi IS NULL OR typeof(rssi) = 'real'),
   snr  REAL CHECK (snr  IS NULL OR typeof(snr)  = 'real'),
   observed  INTEGER NOT NULL DEFAULT 0 CHECK (observed IN (0, 1)),
+  mesh_ids  TEXT,
   repeaters TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_samples_time ON samples(time);
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS coverage (
   lost INTEGER NOT NULL DEFAULT 0,
   rssi REAL CHECK (rssi IS NULL OR typeof(rssi) = 'real'),
   snr  REAL CHECK (snr  IS NULL OR typeof(snr)  = 'real'),
+  mesh_ids  TEXT,
   repeaters TEXT NOT NULL DEFAULT '[]',
   entries TEXT NOT NULL DEFAULT '[]'
 );
@@ -64,3 +66,53 @@ CREATE TABLE IF NOT EXISTS rx_samples (
     CHECK (json_valid(samples) AND json_type(samples)='array')
 );
 CREATE INDEX IF NOT EXISTS idx_rx_samples_time ON rx_samples(time);
+
+-- VIEWS ---
+--DROP VIEW IF EXISTS v_rx_expanded;
+--DROP VIEW IF EXISTS v_rx_ui;
+
+CREATE VIEW IF NOT EXISTS v_rx_expanded AS
+SELECT
+  rs.hash,
+  rs.time,
+  json_extract(e.value, '$.repeater') AS repeater,
+  CAST(json_extract(e.value, '$.rssi') AS REAL) AS rssi,
+  CAST(json_extract(e.value, '$.snr') AS REAL) AS snr
+FROM rx_samples rs
+JOIN json_each(rs.samples) e;
+
+CREATE VIEW IF NOT EXISTS v_rx_ui AS
+WITH
+  by_hash_repeater AS (
+    SELECT
+      hash,
+      repeater as id,
+      time,
+      COUNT(*) as n,
+      AVG(rssi) as rssi_avg,
+      AVG(snr) as snr_avg,
+      MAX(rssi) as rssi_max,
+      MAX(snr) as snr_max
+    FROM v_rx_expanded
+    GROUP BY hash, repeater
+  )
+
+SELECT
+  hash,
+  MAX(time) as time,
+  SUM(n) as count,
+  MAX(rssi_avg) as rssi,
+  MAX(snr_avg) as snr,
+  json_group_array(
+    json_object(
+      'id', id,
+      'count', n,
+      'rssi_max', rssi_max,
+      'rssi_avg', rssi_avg,
+      'snr_max', snr_max,
+      'snr_avg', snr_avg
+    )
+    ORDER BY snr_avg DESC, id
+  ) as repeaters
+FROM by_hash_repeater
+GROUP BY hash
