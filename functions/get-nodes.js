@@ -9,12 +9,17 @@ export async function onRequest(context) {
     repeaters: []
   };
 
+  const oldestCutoff = Date.now() - (10 * util.dayInMillis);
+
   // TODO: Merge RxLog data here too?
   // Coverage
   const { results: coverage } = await context.env.DB
     .prepare(`
       SELECT hash, time, lastObserved, lastHeard, observed,
-        heard, lost, rssi, snr, repeaters FROM coverage`).all();
+        heard, lost, rssi, snr, repeaters
+      FROM coverage
+      WHERE time >= ? OR observed > 0 OR heard > 0`)
+    .bind(oldestCutoff).all();
   coverage.forEach(c => {
     const meshIds = JSON.parse(c.mesh_ids || '[]');
     const rptr = JSON.parse(c.repeaters || '[]');
