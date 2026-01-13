@@ -5,6 +5,7 @@ import {
   definedOr,
   fromTruncatedTime,
   geo,
+  getMeshIdColor,
   haversineMiles,
   lerp,
   maxDistanceMiles,
@@ -72,6 +73,7 @@ mapControl.onAdd = m => {
             <option value="pastDay" title="Tiles updated in the past 1 day">Past Day</option>
             <option value="repeaterCount" title="Higher indicates more repeaters">Repeater Count</option>
             <option value="sampleCount" title="Higher indicates more samples">Sample Count</option>
+            <option value="meshId" title="Color indicates the meshes that observed the pings">Mesh Id</option>
             <option value="rxLogRssi" title="RSSI normalized as percentage, RxLog data">RxLog RSSI</option>
             <option value="rxLogSnr" title="SNR normalized as percentage, RxLog data">RxLog SNR</option>
             <option value="rxLogRptrCnt" title="Higher indicates more repeaters, RxLog data">RxLog Repeater Count</option>
@@ -495,6 +497,17 @@ function getCoverageStyle(coverage) {
       }
     }
 
+    case 'meshId': {
+      if (coverage.msh.length) {
+        style.color = getMeshIdColor(coverage.msh);
+        style.opacity = 0;
+        style.fillOpacity = 0.9;
+      } else {
+        style.opacity = 0.2;
+        style.fillOpacity = 0;
+      }
+    }
+
     default: break;
   }
 
@@ -560,6 +573,7 @@ function coverageMarker(c) {
     ${c.ut ? `<div>Updated: ${shortDateStr(updateDate)}</div>` : ''}
     ${c.hrd ? `<div>Heard: ${shortDateStr(lastHeardDate)}</div>` : ''}
     ${c.obs ? `<div>Observed: ${shortDateStr(lastObservedDate)}</div>` : ''}
+    ${c.msh.length ? `<div>Mesh Ids: ${c.msh.join(', ')}</div>` : ''}
     </div>`;
 
   rect.coverage = c;
@@ -906,10 +920,12 @@ function buildIndexes(nodes) {
         lht: 0,
         lot: 0,
         rptr: [],
+        msh: null
       };
       hashToCoverage.set(key, coverage);
     }
 
+    const meshIds = s.msh ?? [];
     const path = s.path ?? [];
     const observed = s.obs;
     const heard = path.length > 0;
@@ -926,6 +942,12 @@ function buildIndexes(nodes) {
       if (!coverage.rptr.includes(lp))
         coverage.rptr.push(lp);
     });
+    meshIds.forEach(m => {
+      if (!coverage.msh)
+        coverage.msh = [m];
+      else if (!coverage.msh.includes(m))
+        coverage.msh.push(m);
+    });
   });
 
   // Index repeaters.
@@ -937,6 +959,9 @@ function buildIndexes(nodes) {
 
   // Build connections.
   hashToCoverage.entries().forEach(([key, coverage]) => {
+    // Ensure meshIds are sorted.
+    coverage.msh = coverage.msh?.sort() ?? [];
+
     coverage.rptr.forEach(r => {
       const candidateRepeaters = idToRepeaters.get(r);
       if (candidateRepeaters === undefined)

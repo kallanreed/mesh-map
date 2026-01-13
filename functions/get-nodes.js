@@ -16,6 +16,7 @@ export async function onRequest(context) {
       SELECT hash, time, lastObserved, lastHeard, observed,
         heard, lost, rssi, snr, repeaters FROM coverage`).all();
   coverage.forEach(c => {
+    const meshIds = JSON.parse(c.mesh_ids || '[]');
     const rptr = JSON.parse(c.repeaters || '[]');
     const item = {
       id: c.hash,
@@ -28,9 +29,10 @@ export async function onRequest(context) {
     };
 
     // Don't send empty values.
-    if (rptr.length > 0) {
-      item.rptr = rptr
-    };
+    if (meshIds.length > 0)
+      item.msh == meshIds;
+    if (rptr.length > 0)
+      item.rptr = rptr;
     if (c.snr != null) item.snr = c.snr;
     if (c.rssi != null) item.rssi = c.rssi;
 
@@ -42,6 +44,7 @@ export async function onRequest(context) {
   const { results: samples } = await context.env.DB
     .prepare("SELECT * FROM samples").all();
   samples.forEach(s => {
+    const meshIds = JSON.parse(s.mesh_ids || '[]');
     const path = JSON.parse(s.repeaters || '[]');
     const item = {
       id: s.hash,
@@ -50,9 +53,10 @@ export async function onRequest(context) {
     };
 
     // Don't send empty values.
-    if (path.length > 0) {
-      item.path = path
-    };
+    if (meshIds.length > 0)
+      item.msh = meshIds;
+    if (path.length > 0)
+      item.path = path;
     if (s.snr != null) item.snr = s.snr;
     if (s.rssi != null) item.rssi = s.rssi;
 

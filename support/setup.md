@@ -49,7 +49,7 @@ two digits.
 # Setup
 ## MQTT
 You're on your own here. There are lots of docs online. Definitely check out
-[letsme.sh](https://analyzer.letsme.sh/about).
+[letsmesh.net](https://analyzer.letsmesh.net/about).
 
 ## Cloudflare
 You need a Cloudflare account - you can start with a free account for testing.
@@ -63,7 +63,7 @@ You also need a GitHub account. The app is automatically deployed from the main 
     3) You can use wrangler or the UI to execute queries against your data.
 4) Update the wrangler.jsonc with the actual id and name for your database.
 Leave the binding names alone. Those are the names used in the code.
-5) Create the tables in the DB.
+5) Create the tables in the DB (do these even when upgrading).
     1) `npx wrangler d1 execute mesh-map --file=./support/schema.sql --remote`
     2) If you're running locally, you'll need to do without `--remote` to set up the local DB too. 
 6) Change the host in functions/slurp to your host. This is kind of optional because
@@ -86,6 +86,7 @@ want to lose, you will need to run the upgrade_000.sql scripts, *in order*. Ther
 DB versioning currently so you'll need to know what was the last upgrade you ran and
 run everything after that. To help you determine whether you need to run an upgrade,
 here's a change log.
+* schema.sql -- contains the base tables and views. **Always run after a sync to ensure you have all the tables/views.**
 * upgrade_001.sql -- adds columns needed for regional mesh name support.
 
 #### Old KV Version

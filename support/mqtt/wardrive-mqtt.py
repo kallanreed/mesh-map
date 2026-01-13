@@ -4,6 +4,7 @@ import os
 import paho.mqtt.client as mqtt
 import re
 import requests
+import socket
 import ssl
 import threading
 import time
@@ -25,6 +26,15 @@ WORK_Q = Queue(maxsize=2000)
 SERVICE_HOST = CONFIG['service_host']
 ADD_REPEATER_URL = '/put-repeater'
 ADD_SAMPLE_URL = '/put-sample'
+
+STATS = {
+  'last_connect': 0,
+  'last_message': 0,
+  'last_pingrsp': 0,
+  'last_log_stats': 0,
+  'received_count': 0,
+  'processed_count': 0,
+}
 
 OBSERVERS = {}
 PACKET_HISTORY = {}
@@ -62,6 +72,32 @@ def get_observers_map(config):
   return observers
 
 
+# Logs current stats.
+def log_stats():
+  now = time.monotonic()
+  stats = {
+    'uptime': int(now - STATS['last_connect']),
+    'since_last_message': int(now - STATS['last_message']),
+    #'since_last_pingresp': int(now - STATS['last_pingresp']),
+    'received': STATS['received_count'],
+    'processed': STATS['processed_count'],
+    'queue_size': WORK_Q.qsize()
+  }
+  print(f'STATS: {stats}')
+  STATS['last_log_stats'] = now
+
+
+# Resets the stats tracking.
+def reset_stats():
+  STATS['last_connect'] = 0
+  STATS['last_message'] = 0
+  STATS['last_pingresp'] = 0
+  STATS['last_log_stats'] = 0
+  STATS['received_count'] = 0
+  STATS['processed_count'] = 0
+
+
+# Get the deque history for the specified mesh and packet type.
 def get_packet_history(mesh: str, packet_type: str):
   # Use the same 'None' history for all ADVERT packets
   # because they are not getting tracked per-mesh.
@@ -118,8 +154,7 @@ def upload_repeater(id: str, name: str, lat: float, lon: float):
     'id': id,
     'name': name,
     'lat': lat,
-    'lon': lon,
-    'path': []
+    'lon': lon
   }
   url = SERVICE_HOST + ADD_REPEATER_URL
   post_to_service(url, payload)
@@ -241,29 +276,42 @@ def handle_channel_msg(packet, mesh):
 
 # Callback when the client receives a CONNACK response from the broker.
 def on_connect(client, userdata, flags, reason_code, properties = None):
+  reset_stats()
+  STATS['last_connect'] = time.monotonic()
+
   if reason_code == 0:
     print('Connected to MQTT Broker')
     client.subscribe(CONFIG['mqtt_topic'])
   else:
     print(f'Failed to connect, return code {reason_code}', flush = True)
-    # TODO: Max failure count?
-    # os._exit(1)
 
 
 # Callback when the client is disconnected from the broker.
 def on_disconnect(client, userdata, flags, reason_code, properties = None):
   if reason_code != 0:
     print(f'MQTT disconnected unexpectedly, rc={reason_code}', flush = True)
-    # TODO: Max failure count?
-    # os._exit(1)
+    log_stats()
 
 
 # Callback when a PUBLISH message is received from the broker.
 def on_message(client, userdata, msg):
   try:
+    STATS['last_message'] = time.monotonic()
+    STATS['received_count'] += 1
     WORK_Q.put_nowait(msg.payload)
   except Full:
-    print("Queue full; dropping message")
+    print('Queue full; dropping message')
+
+
+# Callback for logging.
+def on_log(client, userdata, level, buf):
+  if 'Received PUBLISH' in buf:
+    return
+  if 'Sending PINGREQ' in buf:
+      log_stats()
+  if 'Received PINGRESP' in buf:
+      STATS['last_pingresp'] = time.monotonic()
+  print(f'PAHO: {buf}')
 
 
 # Handles payload on background thread.
@@ -316,22 +364,30 @@ def process_payload(payload):
 # Processes the WORK_Q items.
 def queue_processor():
   while True:
+    # Log stats every 10 minutes.
+    if (time.monotonic() - STATS['last_log_stats']) > 600:
+      log_stats()
+
     payload = WORK_Q.get()
     try:
       process_payload(payload)
+      STATS['processed_count'] += 1
+    except Exception as e:
+      print(f'Error in queue_processor: {e}')
     finally:
       WORK_Q.task_done()
-      time.sleep(0)  # yield GIL to other threads
+      time.sleep(0.001)  # yield GIL to other threads
 
 
 def main():
   init_observers_map()
 
-  # Initialize the MQTT client
+  # Initialize the MQTT client.
   client = mqtt.Client(
     mqtt.CallbackAPIVersion.VERSION2,
     transport='websockets',
-    client_id='wardrive_bot',
+    client_id=None,
+    clean_session=True,
     protocol=mqtt.MQTTv311)
 
   client.username_pw_set(
@@ -340,18 +396,18 @@ def main():
 
   client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
   client.tls_insecure_set(False)
-  client.ws_set_options(path="/")
   client.reconnect_delay_set(min_delay=1, max_delay=60)
 
   client.on_connect = on_connect
   client.on_disconnect = on_disconnect
   client.on_message = on_message
+  #client.on_log = on_log
 
   try:
     print('Starting worker thread...')
     threading.Thread(target=queue_processor, daemon=True).start()
     print(f"Connecting to {CONFIG['mqtt_host']}:{CONFIG['mqtt_port']}")
-    client.connect(CONFIG['mqtt_host'], CONFIG['mqtt_port'], 90)
+    client.connect(CONFIG['mqtt_host'], CONFIG['mqtt_port'], 30)
     client.loop_forever(retry_first_connection=True)
   except Exception as e:
     print(f'An error occurred: {e}')
