@@ -26,6 +26,8 @@ const statusEl = $("status");
 const deviceInfoEl = $("deviceInfo");
 const ignoredRepeaterId = $("ignoredRepeaterId");
 const sendRadioNameCB = $("sendRadioNameCB");
+const passiveReminderModal = $("passiveReminderModal");
+const passiveReminderClose = $("passiveReminderClose");
 
 const connectBtn = $("connectBtn");
 const sendPingBtn = $("sendPingBtn");
@@ -161,8 +163,12 @@ function log(msg) {
 
 // --- State ---
 const PING_HISTORY_ID_KEY = "meshcoreWardrivePingHistoryV1"
-const IGNORED_ID_KEY = "meshcoreWardriveIgnoredIdV1"
 const SETTINGS_ID_KEY = "meshcoreWardriveSettingsV1"
+const DEFAULT_SETTINGS = {
+  ignoredId: null,
+  sendRadioName: false,
+  lastPassiveReminder: 0
+};
 
 const state = {
   connection: null,
@@ -171,8 +177,7 @@ const state = {
   running: false,
   autoTimerId: null,
   wakeLock: null,
-  ignoredId: null, // Allows a repeater to be ignored.
-  sendRadioName: false,
+  settings: { ...DEFAULT_SETTINGS },
   pings: [],
   rxHistory: [],
   tiles: new Map(),
@@ -332,55 +337,67 @@ function redrawPingHistory() {
 }
 
 // --- Saved Settings ---
-// One-time migration to new settings object.
-function migrateSettings() {
+function readSettings() {
   try {
-    const id = localStorage.getItem(IGNORED_ID_KEY);
-    if (id) {
-      state.ignoredId = id;
+    const parsed = JSON.parse(localStorage.getItem(SETTINGS_ID_KEY) || '{}');
+    if (!parsed || typeof parsed !== 'object') {
+      return { ...DEFAULT_SETTINGS };
     }
-    saveSettings();
-    localStorage.removeItem(IGNORED_ID_KEY);
+    return { ...DEFAULT_SETTINGS, ...parsed };
   } catch (e) {
-    console.warn("Failed to migrate ignored id", e);
-  }
-}
-
-function loadSettings() {
-  try {
-    let settingsStr = localStorage.getItem(SETTINGS_ID_KEY);
-
-    if (settingsStr === null) {
-      migrateSettings();
-      settingsStr = localStorage.getItem(SETTINGS_ID_KEY);
-    }
-    const settings = JSON.parse(settingsStr)
-    state.ignoredId = settings.ignoredId ?? null;
-    state.sendRadioName = settings.sendRadioName ?? false;
-    refreshSettingsUI();
-  } catch (e) {
-    console.warn("Failed to load settings", e);
+    console.warn("Failed to parse settings", e);
     localStorage.removeItem(SETTINGS_ID_KEY);
+    return { ...DEFAULT_SETTINGS };
   }
 }
 
-function saveSettings() {
-  const settings = {
-    ignoredId: state.ignoredId,
-    sendRadioName: state.sendRadioName
-  };
-
+function persistSettings(settings) {
   localStorage.setItem(SETTINGS_ID_KEY, JSON.stringify(settings));
 }
 
+function loadSettings() {
+  state.settings = readSettings();
+  refreshSettingsUI();
+}
+
 function refreshSettingsUI() {
-  ignoredRepeaterId.innerText = state.ignoredId ?? "<none>";
-  sendRadioNameCB.checked = state.sendRadioName;
+  ignoredRepeaterId.innerText = state.settings.ignoredId ?? "<none>";
+  sendRadioNameCB.checked = state.settings.sendRadioName;
+}
+
+function maybeShowPassiveReminder() {
+  const now = Date.now();
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const lastShown = state.settings.lastPassiveReminder ?? 0;
+  if (now - lastShown < weekMs) {
+    return;
+  }
+
+  if (!passiveReminderModal) {
+    return;
+  }
+
+  showPassiveReminderModal();
+  state.settings.lastPassiveReminder = now;
+  persistSettings(state.settings);
+}
+
+function showPassiveReminderModal() {
+  passiveReminderModal.classList.remove("hidden");
+  passiveReminderModal.classList.add("flex");
+}
+
+function hidePassiveReminderModal() {
+  if (!passiveReminderModal) {
+    return;
+  }
+  passiveReminderModal.classList.add("hidden");
+  passiveReminderModal.classList.remove("flex");
 }
 
 // --- Ignored Id ---
 function promptIgnoredId() {
-  const id = prompt("Enter repeater id to ignore.", state.ignoredId ?? '');
+  const id = prompt("Enter repeater id to ignore.", state.settings.ignoredId ?? '');
 
   // Was prompt cancelled?
   if (id === null)
@@ -391,8 +408,8 @@ function promptIgnoredId() {
     return;
   }
 
-  state.ignoredId = id ? id.toLowerCase() : null;
-  saveSettings();
+  state.settings.ignoredId = id ? id.toLowerCase() : null;
+  persistSettings(state.settings);
   refreshSettingsUI();
 }
 
@@ -612,7 +629,8 @@ async function sendPing({ auto = false } = {}) {
 
   // TODO: just send the sample geohash.
   let text = `${lat.toFixed(4)} ${lon.toFixed(4)}`;
-  if (state.ignoredId !== null) text += ` ${state.ignoredId}`;
+  if (state.settings.ignoredId !== null)
+    text += ` ${state.settings.ignoredId}`;
 
   try {
     // Send mesh message: "<lat> <lon> [<id>]".
@@ -645,7 +663,7 @@ async function sendPing({ auto = false } = {}) {
       }
     }
 
-    if (state.sendRadioName) {
+    if (state.settings.sendRadioName) {
       data.sender = state.radioName;
     }
 
@@ -915,7 +933,7 @@ async function trySendRxSample(repeater, lastSnr, lastRssi) {
       }
     };
 
-    if (state.sendRadioName) {
+    if (state.settings.sendRadioName) {
       data.sender = state.radioName;
     }
     const dataStr = JSON.stringify(data);
@@ -955,7 +973,7 @@ async function onLogRxData(frame) {
 
   // Try to get the last hop, ignoring mobile repeaters.
   let lastRepeater = getPathEntry(packet.path, -1);
-  if (lastRepeater === state.ignoredId) {
+  if (lastRepeater === state.settings.ignoredId) {
     hitMobileRepeater = true;
     lastRepeater = getPathEntry(packet.path, -2);
   }
@@ -1041,9 +1059,11 @@ autoToggleBtn.addEventListener("click", async () => {
 ignoredRepeaterBtn.addEventListener("click", promptIgnoredId);
 
 sendRadioNameCB.addEventListener("change", e => {
-  state.sendRadioName = e.target.checked;
-  saveSettings();
+  state.settings.sendRadioName = e.target.checked;
+  persistSettings(state.settings);
 });
+
+passiveReminderClose?.addEventListener("click", hidePassiveReminderModal);
 
 // Automatically release wake lock when the page is hidden.
 document.addEventListener('visibilitychange', async () => {
@@ -1073,6 +1093,7 @@ if ('bluetooth' in navigator) {
 export async function onLoad() {
   try {
     loadSettings();
+    maybeShowPassiveReminder();
     loadPingHistory();
     updateControlsForConnection(false);
     updateAutoButton();
