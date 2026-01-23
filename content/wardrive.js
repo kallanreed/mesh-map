@@ -43,7 +43,7 @@ const logoBrightEl = $("logoBright");
 const wardriveChannelHash = parseInt("e0", 16);
 const wardriveChannelKey = BufferUtils.hexToBytes("4076c315c1ef385fa93f066027320fe5");
 const wardriveChannelName = "#wardrive";
-const refreshTileAge = .95; // Tiles older than this (days) will get pinged again.
+const refreshTileAge = 3; // Tiles older than this (days) will get pinged again.
 
 // --- Global Init ---
 // Map setup
@@ -177,6 +177,7 @@ function log(msg) {
 // --- State ---
 const PING_HISTORY_ID_KEY = "meshcoreWardrivePingHistoryV1"
 const SETTINGS_ID_KEY = "meshcoreWardriveSettingsV1"
+const DISCOVERY_HISTORY_SIZE = 30;
 const DEFAULT_SETTINGS = {
   ignoredId: null,
   sendRadioName: false,
@@ -195,6 +196,7 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
   pings: [],
   rxHistory: [],
+  discoveryHistory: [],
   tiles: new Map(),
   following: true,
   backgroundTimer: null,
@@ -458,14 +460,44 @@ async function backgroundTimerTick() {
   }
 }
 
+// --- Discovery Pings ---
+
+function getDiscoveryHistoryEntry(tileId) {
+  let entry = state.discoveryHistory.find(item => item.tileId === tileId);
+  if (!entry) {
+    entry = { tileId, discoveryCount: 0 };
+    state.discoveryHistory.push(entry);
+    if (state.discoveryHistory.length > DISCOVERY_HISTORY_SIZE) {
+      state.discoveryHistory.shift();
+    }
+  }
+  return entry;
+}
+
 async function sendDiscoveryPing() {
   if (!state.settings.sendDiscovery || !state.connected)
     return;
 
+  // Limit to once per 30 seconds.
   const now = Date.now();
   if (now - state.lastDiscoveryTime < 30 * 1000)
     return;
 
+  if (!isValidLocation(state.currentPos))
+    return;
+
+  // Don't need a ping if there are RxLog samples for it.
+  const [lat, lon] = state.currentPos;
+  const tileId = geohash6(lat, lon);
+  if (state.rxHistory.some(key => key.startsWith(`${tileId}#`)))
+    return;
+
+  // Limit the number of pings in a tile to 2.
+  const historyEntry = getDiscoveryHistoryEntry(tileId);
+  if (historyEntry.discoveryCount >= 2)
+    return;
+
+  historyEntry.discoveryCount += 1;
   state.lastDiscoveryTime = now;
   await sendDiscoveryRequest();
 }
