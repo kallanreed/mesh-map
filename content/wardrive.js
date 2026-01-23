@@ -26,6 +26,7 @@ const statusEl = $("status");
 const deviceInfoEl = $("deviceInfo");
 const ignoredRepeaterId = $("ignoredRepeaterId");
 const sendRadioNameCB = $("sendRadioNameCB");
+const sendDiscoveryCB = $("sendDiscoveryCB");
 const passiveReminderModal = $("passiveReminderModal");
 const passiveReminderClose = $("passiveReminderClose");
 
@@ -151,10 +152,22 @@ async function ensureLatestVersion() {
 }
 
 // --- Logging ---
+const STATUS_CLEAR_MS = 10 * 1000;
+let statusClearTimer = null;
+
 function setStatus(text, color = null) {
   statusEl.textContent = text;
   log(`status: ${text}`);
   statusEl.className = "font-semibold " + (color ?? "");
+
+  if (statusClearTimer) {
+    clearTimeout(statusClearTimer);
+  }
+  statusClearTimer = setTimeout(() => {
+    statusEl.textContent = "";
+    statusEl.className = "font-semibold";
+    statusClearTimer = null;
+  }, STATUS_CLEAR_MS);
 }
 
 function log(msg) {
@@ -167,11 +180,13 @@ const SETTINGS_ID_KEY = "meshcoreWardriveSettingsV1"
 const DEFAULT_SETTINGS = {
   ignoredId: null,
   sendRadioName: false,
+  sendDiscovery: true,
   lastPassiveReminder: 0
 };
 
 const state = {
   connection: null,
+  connected: false,
   radioName: null,
   wardriveChannel: null,
   running: false,
@@ -182,8 +197,9 @@ const state = {
   rxHistory: [],
   tiles: new Map(),
   following: true,
-  locationTimer: null,
-  lastPosUpdate: 0, // Timestamp of last location update.
+  backgroundTimer: null,
+  lastLocationUpdate: 0, // Timestamp of last location update.
+  lastDiscoveryTime: 0, // Timestamp of last discovery ping.
   currentPos: [0, 0],
 };
 
@@ -363,6 +379,7 @@ function loadSettings() {
 function refreshSettingsUI() {
   ignoredRepeaterId.innerText = state.settings.ignoredId ?? "<none>";
   sendRadioNameCB.checked = state.settings.sendRadioName;
+  sendDiscoveryCB.checked = state.settings.sendDiscovery;
 }
 
 function maybeShowPassiveReminder() {
@@ -413,21 +430,48 @@ function promptIgnoredId() {
   refreshSettingsUI();
 }
 
-// --- Geolocation ---
-async function startLocationTracking() {
-  stopLocationTracking();
-  await updateCurrentPosition(); // Run immediately, then on timer.
-  state.locationTimer = setInterval(updateCurrentPosition, 1000);
+// --- Background timer ---
+async function startBackgroundTimer() {
+  stopBackgroundTimer();
+  await backgroundTimerTick(); // Run immediately, then on timer.
+  state.backgroundTimer = setInterval(backgroundTimerTick, 1000);
 }
 
-function stopLocationTracking() {
-  if (state.locationTimer) {
-    clearInterval(state.locationTimer);
-    state.locationTimer = null;
+function stopBackgroundTimer() {
+  if (state.backgroundTimer) {
+    clearInterval(state.backgroundTimer);
+    state.backgroundTimer = null;
   }
 }
 
-async function updateCurrentPosition() {
+async function backgroundTimerTick() {
+  try {
+    await locationUpdate();
+  } catch (e) {
+    console.error("Location update failed", e);
+  }
+
+  try {
+    await sendDiscoveryPing();
+  } catch (e) {
+    console.error("Discovery ping failed", e);
+  }
+}
+
+async function sendDiscoveryPing() {
+  if (!state.settings.sendDiscovery || !state.connected)
+    return;
+
+  const now = Date.now();
+  if (now - state.lastDiscoveryTime < 30 * 1000)
+    return;
+
+  state.lastDiscoveryTime = now;
+  await sendDiscoveryRequest();
+}
+
+// --- Geolocation ---
+async function locationUpdate() {
   const pos = await getCurrentPosition();
   const lat = pos.coords.latitude;
   const lon = pos.coords.longitude;
@@ -438,7 +482,7 @@ async function updateCurrentPosition() {
   if (state.following)
     map.panTo(state.currentPos);
 
-  state.lastPosUpdate = Date.now();
+  state.lastLocationUpdate = Date.now();
 }
 
 function getCurrentPosition() {
@@ -459,11 +503,11 @@ function getCurrentPosition() {
   });
 }
 
-// Helper to ensure the location tracking timer stays running.
+// Helper to ensure the background timer stays running.
 async function ensureCurrentPositionIsFresh() {
-  const dt = Date.now() - state.lastPosUpdate;
+  const dt = Date.now() - state.lastLocationUpdate;
   if (dt > 3000) {
-    await startLocationTracking();
+    await startBackgroundTimer();
   }
 }
 
@@ -582,7 +626,7 @@ async function listenForRepeat(message, timeoutMs) {
 }
 
 async function sendPing({ auto = false } = {}) {
-  if (!state.connection) {
+  if (!state.connected) {
     setStatus("Not connected", "text-red-300");
     return;
   }
@@ -721,6 +765,8 @@ function updateControlsForConnection(connected) {
     sendPingBtn.disabled = true;
     autoToggleBtn.disabled = true;
   }
+
+  state.connected = connected;
 }
 
 function updateFollowButton() {
@@ -757,7 +803,7 @@ function stopAutoPing() {
 }
 
 async function startAutoPing() {
-  if (!state.connection) {
+  if (!state.connected) {
     alert("Connect to a MeshCore device first.");
     return;
   }
@@ -798,10 +844,8 @@ async function handleConnect() {
     const connection = await WebBleConnection.open();
     state.connection = connection;
 
-    // Add handlers
     connection.on("connected", onConnected);
-    connection.on("disconnected", onDisconnected);
-    connection.on(Constants.PushCodes.LogRxData, onLogRxData);
+    await connection.init();
   } catch (e) {
     console.error("Failed to open BLE connection", e);
     setStatus("Failed to connect", "text-red-300");
@@ -825,6 +869,10 @@ async function onConnected() {
   setStatus("Connected (syncing…)", "text-emerald-300");
 
   try {
+    state.connection.on("disconnected", onDisconnected);
+    state.connection.on("discoveryResponse", onDiscoveryResponse);
+    state.connection.on(Constants.PushCodes.LogRxData, onLogRxData);
+
     try {
       await state.connection.syncDeviceTime();
     } catch {
@@ -860,6 +908,7 @@ function onDisconnected() {
   // Remove handlers
   state.connection.off("connected", onConnected);
   state.connection.off("disconnected", onDisconnected);
+  state.connection.off("discoveryResponse", onDiscoveryResponse);
   state.connection.off(Constants.PushCodes.LogRxData, onLogRxData);
 
   deviceInfoEl.textContent = "";
@@ -953,6 +1002,34 @@ async function trySendRxSample(repeater, lastSnr, lastRssi) {
   }
 }
 
+async function sendDiscoveryRequest({ prefixOnly = true, since = null, tag = null } = {}) {
+  if (!state.connected) {
+    setStatus("Not connected", "text-red-300");
+    return;
+  }
+
+  try {
+    const actualTag = await state.connection.sendDiscoveryRequest({ prefixOnly, since, tag });
+    setStatus("Discovery sent", "text-emerald-300");
+    log(`Discovery request sent (tag=${actualTag})`);
+  } catch (e) {
+    console.error("Discovery request failed", e);
+    setStatus("Discovery request failed", "text-red-300");
+  }
+}
+
+async function onDiscoveryResponse(info) {
+  if (!info || !info.pubkey?.length)
+    return;
+
+  const repeaterId = getPathEntry(info.pubkey, 0); // Get first byte of pubkey.
+  if (repeaterId && info.lastSnr != null && info.lastRssi != null) {
+    log(`Sending discovery response for ${info.tag} from ${repeaterId}`);
+    await blinkRxLog();
+    await trySendRxSample(repeaterId, info.lastSnr, info.lastRssi);
+  }
+}
+
 async function onLogRxData(frame) {
   const lastSnr = frame.lastSnr;
   const lastRssi = frame.lastRssi;
@@ -1043,7 +1120,7 @@ connectBtn.addEventListener("click", () => {
     handleConnect().catch(console.error);
 });
 
-sendPingBtn.addEventListener("click", () => {
+sendPingBtn.addEventListener("click", async () => {
   sendPing({ auto: false }).catch(console.error);
 });
 
@@ -1063,17 +1140,22 @@ sendRadioNameCB.addEventListener("change", e => {
   persistSettings(state.settings);
 });
 
+sendDiscoveryCB.addEventListener("change", e => {
+  state.settings.sendDiscovery = e.target.checked;
+  persistSettings(state.settings);
+});
+
 passiveReminderClose?.addEventListener("click", hidePassiveReminderModal);
 
 // Automatically release wake lock when the page is hidden.
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
     releaseWakeLock();
-    stopLocationTracking();
+    stopBackgroundTimer();
   } else {
-    await startLocationTracking();
+    await startBackgroundTimer();
 
-    if (state.connection)
+    if (state.connected)
       await acquireWakeLock();
   }
 });
@@ -1083,7 +1165,7 @@ if ('bluetooth' in navigator) {
   navigator.bluetooth.addEventListener('backgroundstatechanged',
     (e) => {
       const isBackground = e.target.value;
-      if (isBackground == true && state.connection) {
+      if (isBackground == true && state.connected) {
         stopAutoPing();
         setStatus('Lost focus, Stopped', 'text-amber-300');
       }
@@ -1102,7 +1184,7 @@ export async function onLoad() {
     await refreshCoverage();
     redrawCoverage();
 
-    await startLocationTracking();
+    await startBackgroundTimer();
   } catch (e) {
     const stack = e?.stack;
     alert(`${String(e)}${stack ? `\nStack: ${stack}` : ''}`);

@@ -31,13 +31,13 @@ class WebBleConnection extends Connection {
         });
 
         // make sure user selected a device
-        if(!device){
+        if(!device) {
             return null;
         }
 
         // create connection and initialize it
         const connection = new WebBleConnection(device);
-        await connection.init();
+        //await connection.init();  // Caller needs to init after setting up event handlers.
 
         return connection;
     }
@@ -75,7 +75,6 @@ class WebBleConnection extends Connection {
 
         // fire connected event
         await this.onConnected();
-
     }
 
     async close() {

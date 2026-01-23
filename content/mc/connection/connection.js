@@ -227,6 +227,30 @@ class Connection extends EventEmitter {
         await this.sendToRadioFrame(data.toBytes());
     }
 
+    async sendCommandSendControlData(controlPayload) {
+        const data = new BufferWriter();
+        data.writeByte(Constants.CommandCodes.SendControlData);
+        data.writeBytes(controlPayload);
+        await this.sendToRadioFrame(data.toBytes());
+    }
+
+    async sendDiscoveryRequest({ prefixOnly = true, since = null, tag = null } = {}) {
+        const actualTag = tag ?? (Date.now() >>> 0);
+        const typeFlags = Constants.ControlCodes.NodeDiscoverReq | (prefixOnly ? 0x01 : 0x00);
+        const filter = 1 << Constants.AdvType.Repeater;
+
+        const payloadWriter = new BufferWriter();
+        payloadWriter.writeByte(typeFlags);
+        payloadWriter.writeByte(filter);
+        payloadWriter.writeUInt32LE(actualTag);
+        if(since != null) {
+            payloadWriter.writeUInt32LE(since >>> 0);
+        }
+
+        await this.sendCommandSendControlData(payloadWriter.toBytes());
+        return actualTag;
+    }
+
     async sendCommandSendLogin(publicKey, password) {
         const data = new BufferWriter();
         data.writeByte(Constants.CommandCodes.SendLogin);
@@ -382,6 +406,8 @@ class Connection extends EventEmitter {
             this.onNewAdvertPush(bufferReader);
         } else if(responseCode === Constants.PushCodes.BinaryResponse){
             this.onBinaryResponsePush(bufferReader);
+        } else if(responseCode === Constants.PushCodes.ControlData){
+            this.onControlDataPush(bufferReader);
         } else {
             console.log(`unhandled frame: code=${responseCode}`, frame);
         }
@@ -458,6 +484,50 @@ class Connection extends EventEmitter {
             reserved: bufferReader.readByte(), // reserved
             tag: bufferReader.readUInt32LE(), // 4 bytes tag
             responseData: bufferReader.readRemainingBytes(),
+        });
+    }
+
+    onControlDataPush(bufferReader) {
+        const lastSnr = bufferReader.readInt8() / 4;
+        const lastRssi = bufferReader.readInt8();
+        const pathLen = bufferReader.readInt8();
+        const payload = bufferReader.readRemainingBytes();
+
+        this.emit(Constants.PushCodes.ControlData, {
+            lastSnr,
+            lastRssi,
+            pathLen,
+            payload,
+        });
+
+        if(!payload?.length){
+            return;
+        }
+
+        const typeNode = payload[0];
+        const typeNibble = typeNode & Constants.ControlCodes.TypeMask;
+
+        if(typeNibble === Constants.ControlCodes.NodeDiscoverResp){
+            this.onDiscoveryResponse(payload, lastSnr, lastRssi, pathLen);
+        }
+    }
+
+    onDiscoveryResponse(payload, lastSnr, lastRssi, pathLen) {
+        const reader = new BufferReader(payload);
+        const typeNode = reader.readByte();
+        const nodeType = typeNode & 0x0F;
+        const snrX4 = reader.readInt8();
+        const tag = reader.readUInt32LE();
+        const pubkey = reader.readRemainingBytes();
+
+        this.emit("discoveryResponse", {
+            nodeType: nodeType,
+            snrX4: snrX4,
+            tag: tag,
+            pubkey: pubkey,
+            lastSnr: lastSnr,
+            lastRssi: lastRssi,
+            pathLen: pathLen,
         });
     }
 
