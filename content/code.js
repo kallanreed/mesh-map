@@ -626,7 +626,7 @@ function sampleMarker(s) {
 
 function repeaterMarker(r) {
   const time = fromTruncatedTime(r.time);
-  const stale = ageInDays(time) > 2;
+  const stale = ageInDays(time) > 3;
   const dead = ageInDays(time) > 8;
   const ageClass = (dead ? "dead" : (stale ? "stale" : ""));
   const icon = L.divIcon({
