@@ -7,7 +7,7 @@
 
   "service_host": "https://mesh-map-89j.pages.dev",
   "center_position": [28.00, -81.55],
-  "valid_dist": 300,
+  "valid_dist": 420,
 
   "channel_hash": "e0",
   "channel_secret": "4076c315c1ef385fa93f066027320fe5",
