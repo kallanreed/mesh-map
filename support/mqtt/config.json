@@ -17,8 +17,7 @@
     {
       "mesh_name": "TPA",
       "observers": [
-        "TF-Room",
-        "Coral Springs Chat"
+        "TF-Room"
       ]
     },
     {
@@ -38,6 +37,12 @@
       "mesh_name": "SRQ",
       "observers": [
         "Beanfield Observer1"
+      ]
+    }
+    {
+      "mesh_name": "PPM",
+      "observers": [
+        "Coral Springs Chat"
       ]
     }
   ],
