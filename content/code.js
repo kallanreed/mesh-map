@@ -229,7 +229,7 @@ senderStatsControl.onAdd = m => {
 
   div.innerHTML = `
     <div id="topSendersSection" class="mesh-control-row mesh-control-title interactive">
-      <span>Top Contributors</span><span class="range">(10 days)</span>
+      Top Contributors
     </div>
     <div id="topSendersList" class="mesh-control-row hidden max-height-20"></div>
   `;
@@ -251,9 +251,7 @@ senderStatsControl.onAdd = m => {
 
   // Helper to refresh the stats.
   async function refreshTopSenders(topList) {
-    const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
-    const after = Date.now() - tenDaysMs;
-    const endpoint = `/get-senders?after=${after}`;
+    const endpoint = "/get-senders";
     const resp = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
 
     if (resp.ok) {
@@ -626,7 +624,7 @@ function sampleMarker(s) {
 
 function repeaterMarker(r) {
   const time = fromTruncatedTime(r.time);
-  const stale = ageInDays(time) > 3;
+  const stale = ageInDays(time) > 2;
   const dead = ageInDays(time) > 8;
   const ageClass = (dead ? "dead" : (stale ? "stale" : ""));
   const icon = L.divIcon({

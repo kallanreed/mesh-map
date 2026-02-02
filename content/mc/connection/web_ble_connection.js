@@ -9,6 +9,7 @@ class WebBleConnection extends Connection {
         this.gattServer = null;
         this.rxCharacteristic = null;
         this.txCharacteristic = null;
+        this.init();
     }
 
     static async open() {
@@ -31,15 +32,12 @@ class WebBleConnection extends Connection {
         });
 
         // make sure user selected a device
-        if(!device) {
+        if(!device){
             return null;
         }
 
-        // create connection and initialize it
-        const connection = new WebBleConnection(device);
-        //await connection.init();  // Caller needs to init after setting up event handlers.
+        return new WebBleConnection(device);
 
-        return connection;
     }
 
     async init() {
@@ -75,6 +73,7 @@ class WebBleConnection extends Connection {
 
         // fire connected event
         await this.onConnected();
+
     }
 
     async close() {

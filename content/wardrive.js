@@ -26,9 +26,6 @@ const statusEl = $("status");
 const deviceInfoEl = $("deviceInfo");
 const ignoredRepeaterId = $("ignoredRepeaterId");
 const sendRadioNameCB = $("sendRadioNameCB");
-const sendDiscoveryCB = $("sendDiscoveryCB");
-const passiveReminderModal = $("passiveReminderModal");
-const passiveReminderClose = $("passiveReminderClose");
 
 const connectBtn = $("connectBtn");
 const sendPingBtn = $("sendPingBtn");
@@ -43,7 +40,7 @@ const logoBrightEl = $("logoBright");
 const wardriveChannelHash = parseInt("e0", 16);
 const wardriveChannelKey = BufferUtils.hexToBytes("4076c315c1ef385fa93f066027320fe5");
 const wardriveChannelName = "#wardrive";
-const refreshTileAge = 3; // Tiles older than this (days) will get pinged again.
+const refreshTileAge = 1; // Tiles older than this (days) will get pinged again.
 
 // --- Global Init ---
 // Map setup
@@ -152,22 +149,10 @@ async function ensureLatestVersion() {
 }
 
 // --- Logging ---
-const STATUS_CLEAR_MS = 10 * 1000;
-let statusClearTimer = null;
-
 function setStatus(text, color = null) {
   statusEl.textContent = text;
   log(`status: ${text}`);
   statusEl.className = "font-semibold " + (color ?? "");
-
-  if (statusClearTimer) {
-    clearTimeout(statusClearTimer);
-  }
-  statusClearTimer = setTimeout(() => {
-    statusEl.textContent = "";
-    statusEl.className = "font-semibold";
-    statusClearTimer = null;
-  }, STATUS_CLEAR_MS);
 }
 
 function log(msg) {
@@ -176,32 +161,24 @@ function log(msg) {
 
 // --- State ---
 const PING_HISTORY_ID_KEY = "meshcoreWardrivePingHistoryV1"
+const IGNORED_ID_KEY = "meshcoreWardriveIgnoredIdV1"
 const SETTINGS_ID_KEY = "meshcoreWardriveSettingsV1"
-const DISCOVERY_HISTORY_SIZE = 30;
-const DEFAULT_SETTINGS = {
-  ignoredId: null,
-  sendRadioName: false,
-  sendDiscovery: true,
-  lastPassiveReminder: 0
-};
 
 const state = {
   connection: null,
-  connected: false,
   radioName: null,
   wardriveChannel: null,
   running: false,
   autoTimerId: null,
   wakeLock: null,
-  settings: { ...DEFAULT_SETTINGS },
+  ignoredId: null, // Allows a repeater to be ignored.
+  sendRadioName: false,
   pings: [],
   rxHistory: [],
-  discoveryHistory: [],
   tiles: new Map(),
   following: true,
-  backgroundTimer: null,
-  lastLocationUpdate: 0, // Timestamp of last location update.
-  lastDiscoveryTime: 0, // Timestamp of last discovery ping.
+  locationTimer: null,
+  lastPosUpdate: 0, // Timestamp of last location update.
   currentPos: [0, 0],
 };
 
@@ -355,68 +332,55 @@ function redrawPingHistory() {
 }
 
 // --- Saved Settings ---
-function readSettings() {
+// One-time migration to new settings object.
+function migrateSettings() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(SETTINGS_ID_KEY) || '{}');
-    if (!parsed || typeof parsed !== 'object') {
-      return { ...DEFAULT_SETTINGS };
+    const id = localStorage.getItem(IGNORED_ID_KEY);
+    if (id) {
+      state.ignoredId = id;
     }
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    saveSettings();
+    localStorage.removeItem(IGNORED_ID_KEY);
   } catch (e) {
-    console.warn("Failed to parse settings", e);
-    localStorage.removeItem(SETTINGS_ID_KEY);
-    return { ...DEFAULT_SETTINGS };
+    console.warn("Failed to migrate ignored id", e);
   }
-}
-
-function persistSettings(settings) {
-  localStorage.setItem(SETTINGS_ID_KEY, JSON.stringify(settings));
 }
 
 function loadSettings() {
-  state.settings = readSettings();
-  refreshSettingsUI();
+  try {
+    let settingsStr = localStorage.getItem(SETTINGS_ID_KEY);
+
+    if (settingsStr === null) {
+      migrateSettings();
+      settingsStr = localStorage.getItem(SETTINGS_ID_KEY);
+    }
+    const settings = JSON.parse(settingsStr)
+    state.ignoredId = settings.ignoredId ?? null;
+    state.sendRadioName = settings.sendRadioName ?? false;
+    refreshSettingsUI();
+  } catch (e) {
+    console.warn("Failed to load settings", e);
+    localStorage.removeItem(SETTINGS_ID_KEY);
+  }
+}
+
+function saveSettings() {
+  const settings = {
+    ignoredId: state.ignoredId,
+    sendRadioName: state.sendRadioName
+  };
+
+  localStorage.setItem(SETTINGS_ID_KEY, JSON.stringify(settings));
 }
 
 function refreshSettingsUI() {
-  ignoredRepeaterId.innerText = state.settings.ignoredId ?? "<none>";
-  sendRadioNameCB.checked = state.settings.sendRadioName;
-  sendDiscoveryCB.checked = state.settings.sendDiscovery;
-}
-
-function maybeShowPassiveReminder() {
-  const now = Date.now();
-  const weekMs = 7 * 24 * 60 * 60 * 1000;
-  const lastShown = state.settings.lastPassiveReminder ?? 0;
-  if (now - lastShown < weekMs) {
-    return;
-  }
-
-  if (!passiveReminderModal) {
-    return;
-  }
-
-  showPassiveReminderModal();
-  state.settings.lastPassiveReminder = now;
-  persistSettings(state.settings);
-}
-
-function showPassiveReminderModal() {
-  passiveReminderModal.classList.remove("hidden");
-  passiveReminderModal.classList.add("flex");
-}
-
-function hidePassiveReminderModal() {
-  if (!passiveReminderModal) {
-    return;
-  }
-  passiveReminderModal.classList.add("hidden");
-  passiveReminderModal.classList.remove("flex");
+  ignoredRepeaterId.innerText = state.ignoredId ?? "<none>";
+  sendRadioNameCB.checked = state.sendRadioName;
 }
 
 // --- Ignored Id ---
 function promptIgnoredId() {
-  const id = prompt("Enter repeater id to ignore.", state.settings.ignoredId ?? '');
+  const id = prompt("Enter repeater id to ignore.", state.ignoredId ?? '');
 
   // Was prompt cancelled?
   if (id === null)
@@ -427,83 +391,26 @@ function promptIgnoredId() {
     return;
   }
 
-  state.settings.ignoredId = id ? id.toLowerCase() : null;
-  persistSettings(state.settings);
+  state.ignoredId = id ? id.toLowerCase() : null;
+  saveSettings();
   refreshSettingsUI();
 }
 
-// --- Background timer ---
-async function startBackgroundTimer() {
-  stopBackgroundTimer();
-  await backgroundTimerTick(); // Run immediately, then on timer.
-  state.backgroundTimer = setInterval(backgroundTimerTick, 1000);
-}
-
-function stopBackgroundTimer() {
-  if (state.backgroundTimer) {
-    clearInterval(state.backgroundTimer);
-    state.backgroundTimer = null;
-  }
-}
-
-async function backgroundTimerTick() {
-  try {
-    await locationUpdate();
-  } catch (e) {
-    console.error("Location update failed", e);
-  }
-
-  try {
-    await sendDiscoveryPing();
-  } catch (e) {
-    console.error("Discovery ping failed", e);
-  }
-}
-
-// --- Discovery Pings ---
-
-function getDiscoveryHistoryEntry(tileId) {
-  let entry = state.discoveryHistory.find(item => item.tileId === tileId);
-  if (!entry) {
-    entry = { tileId, discoveryCount: 0 };
-    state.discoveryHistory.push(entry);
-    if (state.discoveryHistory.length > DISCOVERY_HISTORY_SIZE) {
-      state.discoveryHistory.shift();
-    }
-  }
-  return entry;
-}
-
-async function sendDiscoveryPing() {
-  if (!state.settings.sendDiscovery || !state.connected)
-    return;
-
-  // Limit to once per 30 seconds.
-  const now = Date.now();
-  if (now - state.lastDiscoveryTime < 30 * 1000)
-    return;
-
-  if (!isValidLocation(state.currentPos))
-    return;
-
-  // Don't need a ping if there are RxLog samples for it.
-  const [lat, lon] = state.currentPos;
-  const tileId = geohash6(lat, lon);
-  if (state.rxHistory.some(key => key.startsWith(`${tileId}#`)))
-    return;
-
-  // Limit the number of pings in a tile to 2.
-  const historyEntry = getDiscoveryHistoryEntry(tileId);
-  if (historyEntry.discoveryCount >= 2)
-    return;
-
-  historyEntry.discoveryCount += 1;
-  state.lastDiscoveryTime = now;
-  await sendDiscoveryRequest();
-}
-
 // --- Geolocation ---
-async function locationUpdate() {
+async function startLocationTracking() {
+  stopLocationTracking();
+  await updateCurrentPosition(); // Run immediately, then on timer.
+  state.locationTimer = setInterval(updateCurrentPosition, 1000);
+}
+
+function stopLocationTracking() {
+  if (state.locationTimer) {
+    clearInterval(state.locationTimer);
+    state.locationTimer = null;
+  }
+}
+
+async function updateCurrentPosition() {
   const pos = await getCurrentPosition();
   const lat = pos.coords.latitude;
   const lon = pos.coords.longitude;
@@ -514,7 +421,7 @@ async function locationUpdate() {
   if (state.following)
     map.panTo(state.currentPos);
 
-  state.lastLocationUpdate = Date.now();
+  state.lastPosUpdate = Date.now();
 }
 
 function getCurrentPosition() {
@@ -535,11 +442,11 @@ function getCurrentPosition() {
   });
 }
 
-// Helper to ensure the background timer stays running.
+// Helper to ensure the location tracking timer stays running.
 async function ensureCurrentPositionIsFresh() {
-  const dt = Date.now() - state.lastLocationUpdate;
+  const dt = Date.now() - state.lastPosUpdate;
   if (dt > 3000) {
-    await startBackgroundTimer();
+    await startLocationTracking();
   }
 }
 
@@ -658,7 +565,7 @@ async function listenForRepeat(message, timeoutMs) {
 }
 
 async function sendPing({ auto = false } = {}) {
-  if (!state.connected) {
+  if (!state.connection) {
     setStatus("Not connected", "text-red-300");
     return;
   }
@@ -705,8 +612,7 @@ async function sendPing({ auto = false } = {}) {
 
   // TODO: just send the sample geohash.
   let text = `${lat.toFixed(4)} ${lon.toFixed(4)}`;
-  if (state.settings.ignoredId !== null)
-    text += ` ${state.settings.ignoredId}`;
+  if (state.ignoredId !== null) text += ` ${state.ignoredId}`;
 
   try {
     // Send mesh message: "<lat> <lon> [<id>]".
@@ -739,7 +645,7 @@ async function sendPing({ auto = false } = {}) {
       }
     }
 
-    if (state.settings.sendRadioName) {
+    if (state.sendRadioName) {
       data.sender = state.radioName;
     }
 
@@ -797,8 +703,6 @@ function updateControlsForConnection(connected) {
     sendPingBtn.disabled = true;
     autoToggleBtn.disabled = true;
   }
-
-  state.connected = connected;
 }
 
 function updateFollowButton() {
@@ -835,7 +739,7 @@ function stopAutoPing() {
 }
 
 async function startAutoPing() {
-  if (!state.connected) {
+  if (!state.connection) {
     alert("Connect to a MeshCore device first.");
     return;
   }
@@ -876,8 +780,10 @@ async function handleConnect() {
     const connection = await WebBleConnection.open();
     state.connection = connection;
 
+    // Add handlers
     connection.on("connected", onConnected);
-    await connection.init();
+    connection.on("disconnected", onDisconnected);
+    connection.on(Constants.PushCodes.LogRxData, onLogRxData);
   } catch (e) {
     console.error("Failed to open BLE connection", e);
     setStatus("Failed to connect", "text-red-300");
@@ -901,10 +807,6 @@ async function onConnected() {
   setStatus("Connected (syncing…)", "text-emerald-300");
 
   try {
-    state.connection.on("disconnected", onDisconnected);
-    state.connection.on("discoveryResponse", onDiscoveryResponse);
-    state.connection.on(Constants.PushCodes.LogRxData, onLogRxData);
-
     try {
       await state.connection.syncDeviceTime();
     } catch {
@@ -940,7 +842,6 @@ function onDisconnected() {
   // Remove handlers
   state.connection.off("connected", onConnected);
   state.connection.off("disconnected", onDisconnected);
-  state.connection.off("discoveryResponse", onDiscoveryResponse);
   state.connection.off(Constants.PushCodes.LogRxData, onLogRxData);
 
   deviceInfoEl.textContent = "";
@@ -1013,10 +914,6 @@ async function trySendRxSample(repeater, lastSnr, lastRssi) {
         repeater: repeater
       }
     };
-
-    if (state.settings.sendRadioName) {
-      data.sender = state.radioName;
-    }
     const dataStr = JSON.stringify(data);
 
     // TODO: add timeout, this is "best effort" and shouldn't block.
@@ -1031,34 +928,6 @@ async function trySendRxSample(repeater, lastSnr, lastRssi) {
     addPingHistory({ hash: geohash8(lat, lon), rxLog: true });
   } catch (e) {
     console.error("RxSample: Service POST failed", e);
-  }
-}
-
-async function sendDiscoveryRequest({ prefixOnly = true, since = null, tag = null } = {}) {
-  if (!state.connected) {
-    setStatus("Not connected", "text-red-300");
-    return;
-  }
-
-  try {
-    const actualTag = await state.connection.sendDiscoveryRequest({ prefixOnly, since, tag });
-    setStatus("Discovery sent", "text-emerald-300");
-    log(`Discovery request sent (tag=${actualTag})`);
-  } catch (e) {
-    console.error("Discovery request failed", e);
-    setStatus("Discovery request failed", "text-red-300");
-  }
-}
-
-async function onDiscoveryResponse(info) {
-  if (!info || !info.pubkey?.length)
-    return;
-
-  const repeaterId = getPathEntry(info.pubkey, 0); // Get first byte of pubkey.
-  if (repeaterId && info.lastSnr != null && info.lastRssi != null) {
-    log(`Sending discovery response for ${info.tag} from ${repeaterId}`);
-    await blinkRxLog();
-    await trySendRxSample(repeaterId, info.lastSnr, info.lastRssi);
   }
 }
 
@@ -1082,7 +951,7 @@ async function onLogRxData(frame) {
 
   // Try to get the last hop, ignoring mobile repeaters.
   let lastRepeater = getPathEntry(packet.path, -1);
-  if (lastRepeater === state.settings.ignoredId) {
+  if (lastRepeater === state.ignoredId) {
     hitMobileRepeater = true;
     lastRepeater = getPathEntry(packet.path, -2);
   }
@@ -1152,7 +1021,7 @@ connectBtn.addEventListener("click", () => {
     handleConnect().catch(console.error);
 });
 
-sendPingBtn.addEventListener("click", async () => {
+sendPingBtn.addEventListener("click", () => {
   sendPing({ auto: false }).catch(console.error);
 });
 
@@ -1168,26 +1037,19 @@ autoToggleBtn.addEventListener("click", async () => {
 ignoredRepeaterBtn.addEventListener("click", promptIgnoredId);
 
 sendRadioNameCB.addEventListener("change", e => {
-  state.settings.sendRadioName = e.target.checked;
-  persistSettings(state.settings);
+  state.sendRadioName = e.target.checked;
+  saveSettings();
 });
-
-sendDiscoveryCB.addEventListener("change", e => {
-  state.settings.sendDiscovery = e.target.checked;
-  persistSettings(state.settings);
-});
-
-passiveReminderClose?.addEventListener("click", hidePassiveReminderModal);
 
 // Automatically release wake lock when the page is hidden.
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) {
     releaseWakeLock();
-    stopBackgroundTimer();
+    stopLocationTracking();
   } else {
-    await startBackgroundTimer();
+    await startLocationTracking();
 
-    if (state.connected)
+    if (state.connection)
       await acquireWakeLock();
   }
 });
@@ -1197,7 +1059,7 @@ if ('bluetooth' in navigator) {
   navigator.bluetooth.addEventListener('backgroundstatechanged',
     (e) => {
       const isBackground = e.target.value;
-      if (isBackground == true && state.connected) {
+      if (isBackground == true && state.connection) {
         stopAutoPing();
         setStatus('Lost focus, Stopped', 'text-amber-300');
       }
@@ -1207,7 +1069,6 @@ if ('bluetooth' in navigator) {
 export async function onLoad() {
   try {
     loadSettings();
-    maybeShowPassiveReminder();
     loadPingHistory();
     updateControlsForConnection(false);
     updateAutoButton();
@@ -1216,7 +1077,7 @@ export async function onLoad() {
     await refreshCoverage();
     redrawCoverage();
 
-    await startBackgroundTimer();
+    await startLocationTracking();
   } catch (e) {
     const stack = e?.stack;
     alert(`${String(e)}${stack ? `\nStack: ${stack}` : ''}`);
