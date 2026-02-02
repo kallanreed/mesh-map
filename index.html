@@ -4,14 +4,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <meta name="description" content="Florida MeshCore Coverage Map">
+  <meta name="description" content="Florida MeshCore Coverage - Crowd-Sourced Repeater Coverage">
   <meta name="keywords" content="MeshCore,coverage,cascadia,pugetmesh">
   <meta name="author" content="Kyle Reed">
   <link rel="manifest" href="content/manifest.json">
   <link rel="icon" href="content/icon.png">
   <link rel="stylesheet" type="text/css" href="content/style.css" />
 
-  <title>MeshCore Coverage</title>
+  <title>Florida MeshCore Coverage</title>
 
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -22,10 +22,50 @@
 
 <body class="attribution-tweak">
   <div id="map"></div>
+  <dialog id="retireDialog" class="retire-dialog" aria-labelledby="retireDialogTitle" aria-describedby="retireDialogBody">
+    <form method="dialog" class="retire-dialog-content">
+      <h2 id="retireDialogTitle">mesh-map -> meshmapper.net</h2>
+      <p id="retireDialogBody">
+        The team at meshmapper.net have onboarded the Seattle area! They have a lot of great features, tools that help
+        protect the mesh airtime while wardriving, and <em>native wardrive apps</em>! In order to help build the best
+        coverage map while using the least amount of airtime, I've decided to retire my map and encourage everyone to
+        start using their tools. I'm working with the team to migrate all the data we've collected so far so we
+        don't lose any of our hard work. I'll leave this map up, but wardriving is no longer supported.
+      </p>
+      <p class="retire-dialog-link retire-dialog-link-large">
+        Check out <a href="https://sea.meshmapper.net" target="_blank" rel="noopener noreferrer">sea.meshmapper.net</a>
+        and let's fill in the map!
+      </p>
+      <menu class="retire-dialog-actions">
+        <button type="submit" value="close" data-dialog-close>Continue to map</button>
+      </menu>
+    </form>
+  </dialog>
   <script type="module" src="content/code.js"></script>
   <script type="module">
     import { refreshCoverage } from './content/code.js';
     refreshCoverage();
+  </script>
+  <script type="module">
+    const dialog = document.getElementById('retireDialog');
+    if (dialog) {
+      const closeButtons = dialog.querySelectorAll('[data-dialog-close]');
+      closeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          if (dialog.open) {
+            dialog.close();
+          } else {
+            dialog.classList.remove('fallback-open');
+          }
+        });
+      });
+
+      if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+      } else {
+        dialog.classList.add('fallback-open');
+      }
+    }
   </script>
 
   <!-- iOS Safari SVG shadow hack -->

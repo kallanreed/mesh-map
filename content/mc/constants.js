@@ -52,6 +52,7 @@ class Constants {
         SendTelemetryReq: 39,
 
         SendBinaryReq: 50,
+        SendControlData: 55,
     }
 
     static ResponseCodes = {
@@ -90,6 +91,13 @@ class Constants {
         NewAdvert: 0x8A, // when companion is set to manually add contacts
         TelemetryResponse: 0x8B,
         BinaryResponse: 0x8C,
+        ControlData: 0x8E,
+    }
+
+    static ControlCodes = {
+        NodeDiscoverReq: 0x80,
+        NodeDiscoverResp: 0x90,
+        TypeMask: 0xF0,
     }
 
     static ErrorCodes = {

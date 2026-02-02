@@ -11,6 +11,7 @@ export async function onRequest(context) {
   const hash = data.hash;
   const time = Date.now();
   const info = data.info;
+  const sender = data.sender ?? null;
 
   if (!isValidRssi(info.rssi))
     throw new Error("RSSI too high, likely from mobile repeater.");
@@ -51,6 +52,14 @@ export async function onRequest(context) {
     `)
     .bind(hash, time, JSON.stringify(sample))
     .run();
+
+  if (sender) {
+    const todayStart = (new Date()).setHours(0, 0, 0, 0);
+    await context.env.DB
+      .prepare("INSERT OR IGNORE INTO senders (hash, name, time) VALUES (?, ?, ?)")
+      .bind(hash, sender.substring(0, 32), todayStart)
+      .run();
+  }
 
   return new Response('OK');
 }

@@ -110,8 +110,8 @@ class Connection extends EventEmitter {
         data.writeBytes(outPath); // 64 bytes
         data.writeCString(advName, 32); // 32 bytes
         data.writeUInt32LE(lastAdvert);
-        data.writeUInt32LE(advLat);
-        data.writeUInt32LE(advLon);
+        data.writeInt32LE(advLat);
+        data.writeInt32LE(advLon);
         await this.sendToRadioFrame(data.toBytes());
     }
 
@@ -225,6 +225,30 @@ class Connection extends EventEmitter {
         data.writeBytes(path);
         data.writeBytes(rawData);
         await this.sendToRadioFrame(data.toBytes());
+    }
+
+    async sendCommandSendControlData(controlPayload) {
+        const data = new BufferWriter();
+        data.writeByte(Constants.CommandCodes.SendControlData);
+        data.writeBytes(controlPayload);
+        await this.sendToRadioFrame(data.toBytes());
+    }
+
+    async sendDiscoveryRequest({ prefixOnly = true, since = null, tag = null } = {}) {
+        const actualTag = tag ?? (Date.now() >>> 0);
+        const typeFlags = Constants.ControlCodes.NodeDiscoverReq | (prefixOnly ? 0x01 : 0x00);
+        const filter = 1 << Constants.AdvType.Repeater;
+
+        const payloadWriter = new BufferWriter();
+        payloadWriter.writeByte(typeFlags);
+        payloadWriter.writeByte(filter);
+        payloadWriter.writeUInt32LE(actualTag);
+        if(since != null) {
+            payloadWriter.writeUInt32LE(since >>> 0);
+        }
+
+        await this.sendCommandSendControlData(payloadWriter.toBytes());
+        return actualTag;
     }
 
     async sendCommandSendLogin(publicKey, password) {
@@ -382,6 +406,8 @@ class Connection extends EventEmitter {
             this.onNewAdvertPush(bufferReader);
         } else if(responseCode === Constants.PushCodes.BinaryResponse){
             this.onBinaryResponsePush(bufferReader);
+        } else if(responseCode === Constants.PushCodes.ControlData){
+            this.onControlDataPush(bufferReader);
         } else {
             console.log(`unhandled frame: code=${responseCode}`, frame);
         }
@@ -461,6 +487,50 @@ class Connection extends EventEmitter {
         });
     }
 
+    onControlDataPush(bufferReader) {
+        const lastSnr = bufferReader.readInt8() / 4;
+        const lastRssi = bufferReader.readInt8();
+        const pathLen = bufferReader.readInt8();
+        const payload = bufferReader.readRemainingBytes();
+
+        this.emit(Constants.PushCodes.ControlData, {
+            lastSnr,
+            lastRssi,
+            pathLen,
+            payload,
+        });
+
+        if(!payload?.length){
+            return;
+        }
+
+        const typeNode = payload[0];
+        const typeNibble = typeNode & Constants.ControlCodes.TypeMask;
+
+        if(typeNibble === Constants.ControlCodes.NodeDiscoverResp){
+            this.onDiscoveryResponse(payload, lastSnr, lastRssi, pathLen);
+        }
+    }
+
+    onDiscoveryResponse(payload, lastSnr, lastRssi, pathLen) {
+        const reader = new BufferReader(payload);
+        const typeNode = reader.readByte();
+        const nodeType = typeNode & 0x0F;
+        const snrX4 = reader.readInt8();
+        const tag = reader.readUInt32LE();
+        const pubkey = reader.readRemainingBytes();
+
+        this.emit("discoveryResponse", {
+            nodeType: nodeType,
+            snrX4: snrX4,
+            tag: tag,
+            pubkey: pubkey,
+            lastSnr: lastSnr,
+            lastRssi: lastRssi,
+            pathLen: pathLen,
+        });
+    }
+
     onTraceDataPush(bufferReader) {
         const reserved = bufferReader.readByte();
         const pathLen = bufferReader.readUInt8();
@@ -485,8 +555,8 @@ class Connection extends EventEmitter {
             outPath: bufferReader.readBytes(64),
             advName: bufferReader.readCString(32),
             lastAdvert: bufferReader.readUInt32LE(),
-            advLat: bufferReader.readUInt32LE(),
-            advLon: bufferReader.readUInt32LE(),
+            advLat: bufferReader.readInt32LE(),
+            advLon: bufferReader.readInt32LE(),
             lastMod: bufferReader.readUInt32LE(),
         });
     }
@@ -519,8 +589,8 @@ class Connection extends EventEmitter {
             outPath: bufferReader.readBytes(64),
             advName: bufferReader.readCString(32),
             lastAdvert: bufferReader.readUInt32LE(),
-            advLat: bufferReader.readUInt32LE(),
-            advLon: bufferReader.readUInt32LE(),
+            advLat: bufferReader.readInt32LE(),
+            advLon: bufferReader.readInt32LE(),
             lastMod: bufferReader.readUInt32LE(),
         });
     }

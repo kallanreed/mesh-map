@@ -132,7 +132,7 @@ async function mergeCoverage(key, samples, DB) {
   await DB.prepare(`
     INSERT OR REPLACE INTO coverage
       (hash, time, lastObserved, lastHeard, observed, heard, lost, rssi, snr, mesh_ids, repeaters, entries)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       updatedRow.hash,
       updatedRow.time,
