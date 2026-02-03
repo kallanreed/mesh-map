@@ -7,69 +7,78 @@
 </head>
 
 <body class="bg-slate-900 text-slate-300 p-4">
-  <h1 class="mb-4 text-2xl text-slate-100">Contributing to the MeshCore Coverage map</h1>
+  <h1 class="mb-4 text-2xl text-slate-100">Contributing to the MeshCore coverage map</h1>
+
+  <section class="mb-6 rounded-lg border border-slate-700 bg-slate-800/60 p-4">
+    <h2 class="mb-2 text-xl text-slate-100">mesh-map -> meshmapper.net</h2>
+    <p class="text-sm leading-relaxed text-slate-200">
+      The team at meshmapper.net have onboarded Florida! They have a lot of great features, tools that help
+      protect the mesh airtime while wardriving, and <em>native wardrive apps</em>! In order to help build the best
+      coverage map while using the least amount of airtime, We've decided to retire the map and encourage everyone to
+      start using their tools. I'm working with the team to migrate all the data we've collected so far so we
+      don't lose any of our hard work. We'll leave this map up, but wardriving is no longer supported.
+    </p>
+    <p class="mt-2 text-sm text-slate-300">
+      New docs are on the <a class="underline text-sky-300" href="https://wiki.meshmapper.net" target="_blank"
+        rel="noopener noreferrer">meshmapper.net wiki</a>.
+    </p>
+  </section>
 
   <h2 class="mb-2 text-xl text-slate-100">What is this?</h2>
   <div class="flex items-center gap-4 w-130 mb-2 ml-4">
     <img class="rounded-lg" src="/content/hear-me.png" alt="Can you hear me now?" />
     <div class="text-md">
-      The goal of this project is to map out "effective" coverage of the Central West Florida MeshCore mesh.
-      The client app will already tell you whether a repeater heard your message, but that
-      doesn't really tell you much. Did it actually go anywhere? Did anyone else receive it?
-      By using MQTT data from prominent observer nodes, this helps visualize that places
-      where a sent message will be widely received.
+      This project maps "effective" coverage of the Florida MeshCore mesh. Your radio can tell
+      you if a repeater heard you, but that does not show whether your message went further.
+      MQTT observers confirm where messages are widely received.
     </div>
   </div>
 
   <div class="mb-2 pl-4">
     <div class="">
       <a class="underline text-sky-300" target="_blank" href="/">The coverage map</a>
-      is a crowd-sourced visualization of repeater coverage in the Central West Florida MeshCore mesh.
+      is a crowd-sourced view of repeater coverage in the Florida MeshCore mesh.
     </div>
 
     <div>
-      The main map has a few features:
+      The main map includes:
       <ul class="pl-4 text-sm list-disc">
-        <li>Dots indicate "pings" or "samples" from wardrivers.</li>
+        <li>Dots indicate wardrive "pings" or "samples".</li>
         <li style="list-style-type: none">
           <ul class="pl-4 text-sm list-disc">
-            <li>Pings are visible on the map for 1 day before being grouped into a "coverage"
-              tile (a box).</li>
-            <li>Green dot - a ping was "observed" (by MQTT) at that location.</li>
-            <li>Orange dot - a repeater was heard but the ping was not observed.</li>
-            <li>Red dot - a ping was lost.</li>
+            <li>Pings show for 1 day, then roll into a coverage tile.</li>
+            <li>Green dot - observed ping.</li>
+            <li>Orange dot - repeated, not observed.</li>
+            <li>Red dot - ping was lost.</li>
+            <li>Small purple dot - RxLog sample uploaded.</li>
           </ul>
         </li>
-        <li>Coverage tiles hold stats for the last 15 "groupings" of pings.</li>
+        <li>Coverage tiles hold stats for the last 15 grouped pings.</li>
         <li style="list-style-type: none">
           <ul class="pl-4 text-sm list-disc">
-            <li>Green box - the mesh was reachable in this region.</li>
-            <li>Orange box - the mesh was not reachable, but pings were heard in this region.</li>
-            <li>Red box - the mesh was not reachable in this region.</li>
+            <li>Green box - mesh reachable.</li>
+            <li>Orange box - mesh not reachable, but pings were heard.</li>
+            <li>Red box - mesh not reachable.</li>
+            <li>Dark tiles - updated within the past day, no new sample needed.</li>
+            <li>Light tiles - could use an update.</li>
           </ul>
         </li>
-        <li>Dashed line - links a green dot or box to its 1st hop repeater(s).</li>
-        <li>Blue dot - repeater with an advert in the past 1 day.</li>
-        <li>Light gray dot - repeater with an advert in the past 5 days.</li>
-        <li>Dark gray dot - repeater without an advert in the past 5 days.</li>
+        <li>Dashed line - link to 1st hop repeater(s).</li>
+        <li>Blue dot - repeater with an advert in the past day.</li>
+        <li>Light gray dot - advert in the past 5 days.</li>
+        <li>Dark gray dot - no advert in the past 5 days.</li>
       </ul>
     </div>
   </div>
 
   <h2 class="mb-2 text-xl text-slate-100">How it works</h2>
   <div class="mb-2 pl-4 text-base">
-    You send your location to #wardrive in the format "lat.xxxx lon.yyyy".
-    If your location is received, a new point is added to the map indicating
-    you can reach the mesh at that spot. If you want to also log places where you
-    can't reach the mesh, there's a helpful web app you can run on your phone to
-    automate the process. To be considered reachable, your message repeats have to
-    be observed by one of the following MQTT observers.
-    <ul class="pl-4 text-sm list-disc">
-      <li>TF-Room [5f]</li>
-    </ul>
+    You send your location to #wardrive as "lat.xxxx lon.yyyy". If it is received,
+    the map records a reachable point. The wardrive web app can also log misses
+    automatically. A point is "reachable" only if a repeat is observed by MQTT.
   </div>
   <div class="mb-2 pl-4 text-base">
-    WA7JNJ Radio made a nice
+    WA7JNJ Radio made a
     <a class="underline text-sky-300" href="https://www.youtube.com/watch?v=NhpzdhJeT2w" target="_blank">video
       overview</a>
     of the project and how to get started.
@@ -79,20 +88,31 @@
   <div class="mb-2 pl-4 text-base">
     The easiest way to contribute is to use the
     <a class="underline text-sky-300" target="_blank" href="/wardrive">Wardrive app</a>.
-    It allows you to connect to your companion radio and send ping messages
-    automatically. It also sends your ping location to the service so that
-    misses are also automatically logged. You can send single pings or enable
-    'auto mode' which will send a ping when you enter a coverage tile that hasn't
-    been updated recently. The app will also listen for a repeat and send the
-    repeater and radio stats to the service. This allows you to find repeaters
-    that aren't getting repeated by the larger mesh.
+    It connects to your companion radio and can send ping messages automatically.
+    It also posts your ping location so misses are logged. Use single pings or
+    auto mode, which only pings tiles that have not been updated recently. The
+    app listens for repeats and submits repeater and radio stats, which can help
+    identify repeaters not reaching the larger mesh.
+  </div>
+  <div class="mb-2 ml-4 rounded-lg border border-slate-700 bg-slate-800/60 p-3 text-base">
+    Passive wardriving helps too: just connect your radio and the app will collect RxLog-based
+    samples when it hears group traffic. Active pings are best reserved for new areas or testing
+    a new repeater deployment; in well-covered regions, they add little value. Fewer pings are
+    better for the mesh, so use auto mode or short bursts instead of constant manual pings.
   </div>
 
-  <h3 class="mb-2 pl-4 text-lg text-slate-100">Using the Wardrive app</h3>
+  <h3 class="mb-2 pl-4 text-lg text-slate-100">Leaderboard</h3>
   <div class="mb-2 pl-4 text-base">
-    It mostly "just works", but there are few things to know when using the app.
+    The leaderboard counts tiles per day per person, not individual pings. Both active and
+    passive samples contribute, so you can help just by staying connected. We avoid counting
+    individual pings to discourage unnecessary flood messages.
+  </div>
+
+  <h2 class="mb-2 text-xl text-slate-100">Using the Wardrive app</h2>
+  <div class="mb-2 pl-4 text-base">
+      It mostly "just works", but a few things matter:
     <ul class="mb-2 pl-4 text-sm list-disc">
-      <li class="text-amber-300"><b>If you're using a mobile repeater (car-peater), use the "ignore id" function to exclude it from the path.
+      <li class="text-amber-300"><b>If you are using a mobile repeater, use "ignore id" to exclude it from the path.
         Otherwise coverage data will be inaccurate.</b>
         <ul class="pl-4 text-sm list-disc">
           <li>Radio statistics (SNR/RSSI) cannot be collected if you're using a mobile repeater.</li>
@@ -102,7 +122,7 @@
       <li>Your companion radio must add the #wardrive channel. The app will help with that.</li>
       <li>It does not work in Safari or most vendor-modded Android browsers.
         <ul class="pl-4 text-sm list-disc">
-          <li>On Macos use Edge or Chrome.</li>
+          <li>On macOS use Edge or Chrome.</li>
           <li>On iOS, use the <a class="underline text-sky-300" target="_blank"
               href="https://apps.apple.com/us/app/bluefy-web-ble-browser/id1492822055">Bluefy app</a>
           </li>
@@ -115,28 +135,34 @@
       </li>
       <li>You have to disconnect from the MeshCore app in order to connect to your radio. BLE only allows one
         connection.</li>
-      <li>If you're using auto mode, the web page must be in the foreground and the screen unlocked.
+      <li>If you're using auto mode, the page must stay foreground and the screen unlocked.
         <ul class="pl-4 text-sm list-disc">
           <li>It tries to keep the screen alive while running, but I've only tested on iOS.</li>
         </ul>
       </li>
-      <li>Auto mode checks every 10 seconds if you're in a coverage tile that needs an update and only sends a ping if
-        needed (hasn't already been pinged in the past day).</li>
-      <li>Don't spam the mesh or the service. The mesh is a shared resource -- be judicious.</li>
+      <li>Auto mode checks every 10 seconds and only pings tiles that need an update (not pinged in the past day).</li>
+      <li>Do not spam the mesh or the service. The mesh is a shared resource.</li>
     </ul>
-    <h3 class="mb-2 pl-4 text-lg text-slate-100">Passive Mode</h3>
-    <div class="mb-2 pl-4 text-base">
-      As long as your radio is connected, even when not actively pinging, the app will submit
-      passive samples for tiles using the RxLog. When your radio receives a group message the
-      app collects parts of the path and radio statistics and sends that to the service to build
-      out the passive map view. <b>This is disabled if you have an "ignored id" set. Mobile repeaters
-      mess up the data collection because SNR and RSSI values will be completely incorrect for the tile.</b>
-    </div>
+  </div>
+
+  <h3 class="mb-2 pl-4 text-lg text-slate-100">Wardrive app features</h3>
+  <div class="mb-2 pl-4 text-base">
+    <ul class="mb-2 pl-4 text-sm list-disc">
+      <li>Connects over Web BLE and shows your radio name.</li>
+      <li>One-tap ping and auto mode for stale tiles.</li>
+      <li>Logs misses as well as observed pings.</li>
+      <li>Passive RxLog sampling while connected.</li>
+      <li>App logo flashes when RxLog sees flood messages.</li>
+      <li>Repeater path + RSSI/SNR stats for heard messages.</li>
+      <li>Coverage map, ping history, and clear-history tools.</li>
+      <li>Ignore-id support for mobile repeaters.</li>
+      <li>Optional sender name for leaderboard entries.</li>
+    </ul>
   </div>
 
   <h2 class="mb-2 text-xl text-slate-100">Host an instance for your region?</h2>
   <div class="pl-4 text-base mb-2">
-    If you want to set up an instance for your region you have two good options.
+    If you want to set up an instance for your region, you have two options:
     <ul class="pl-4 text-sm list-disc">
       <li>Host your own Cloudflare version by following the
         <a class="underline text-sky-300" href="https://github.com/Mambo430/mesh-map/blob/main/support/setup.md"
@@ -149,9 +175,9 @@
 
   <h2 class="mb-2 text-xl text-slate-100">Privacy</h2>
   <div class="pl-4 text-base">
-    The only thing the service stores is the location you send to #wardrive and the id of the 1st hop repeater.
-    The web app sends your location to #wardrive and to the service. That's it. Logging on the web app is stored
-    locally. You will be sending your companion radio's name with your location to #wardrive which is a public channel.
+    The service stores the location you send to #wardrive and the id of the 1st hop repeater.
+    The web app sends your location to #wardrive and to the service. Logging stays local.
+    Your companion radio name is sent with your location to #wardrive, which is a public channel.
     <b>Optionally</b>, if you want to participate in the leaderboard, you can choose to send your radio name with pings.
   </div>
 
