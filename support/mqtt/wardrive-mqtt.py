@@ -34,6 +34,7 @@ STATS = {
   'last_log_stats': 0,
   'received_count': 0,
   'processed_count': 0,
+  'bad_length': 0,
 }
 
 OBSERVERS = {}
@@ -81,7 +82,8 @@ def log_stats():
     #'since_last_pingresp': int(now - STATS['last_pingresp']),
     'received': STATS['received_count'],
     'processed': STATS['processed_count'],
-    'queue_size': WORK_Q.qsize()
+    'queue_size': WORK_Q.qsize(),
+    'bad_length': STATS['bad_length']
   }
   print(f'STATS: {stats}')
   STATS['last_log_stats'] = now
@@ -95,6 +97,7 @@ def reset_stats():
   STATS['last_log_stats'] = 0
   STATS['received_count'] = 0
   STATS['processed_count'] = 0
+  STATS['bad_length'] = 0
 
 
 # Get the deque history for the specified mesh and packet type.
@@ -241,9 +244,16 @@ def handle_channel_msg(packet, mesh):
   channel_hash = payload.read(1).hex()
   mac = payload.read(2)
   encrypted = payload.read()
+  encrypted_len = len(encrypted)
+  block_size = 16
 
-  # Encrypted data truncated.
-  if len(encrypted) % 16 != 0: return
+  # Encrypted data has a bad length, attempt a fixup.
+  if len(encrypted) % block_size != 0:
+    STATS['bad_length'] += 1
+    new_encrypted_len = int(encrypted_len / block_size) * block_size
+    encrypted = encrypted[:new_encrypted_len]
+    if new_encrypted_len == 0:
+      return
 
   # Not the watched channel.
   if channel_hash != CHANNEL_HASH: return
@@ -281,7 +291,9 @@ def on_connect(client, userdata, flags, reason_code, properties = None):
 
   if reason_code == 0:
     print('Connected to MQTT Broker')
-    client.subscribe(CONFIG['mqtt_topic'])
+    topics = list(map(lambda x: (x, 0), CONFIG['mqtt_topics']))
+    print(f'Subscribing to {topics}')
+    client.subscribe(topics)
   else:
     print(f'Failed to connect, return code {reason_code}', flush = True)
 
