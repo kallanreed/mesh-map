@@ -1,9 +1,15 @@
 {
   "mqtt_host": "mcmqtt.jntconnections.com",
   "mqtt_port": 443,
-  "mqtt_username": "[username]",
-  "mqtt_password": "[password]",
-  "mqtt_topic": "meshcore/+/+/packets",
+  "mqtt_username": "USERNAME",
+  "mqtt_password": "PASSWORD",
+  "mqtt_topics": [
+    "meshcore/TPA/+/packets",
+    "meshcore/JAX/+/packets",
+    "meshcore/PGD/+/packets",
+    "meshcore/SRO/+/packets",
+    "meshcore/PPM/+/packets"
+  ],
 
   "service_host": "https://mesh-map-89j.pages.dev",
   "center_position": [28.00, -81.55],
@@ -38,7 +44,7 @@
       "observers": [
         "Beanfield Observer1"
       ]
-    }
+    },
     {
       "mesh_name": "PPM",
       "observers": [
