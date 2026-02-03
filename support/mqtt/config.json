@@ -1,8 +1,8 @@
 {
   "mqtt_host": "mcmqtt.jntconnections.com",
   "mqtt_port": 443,
-  "mqtt_username": "USERNAME",
-  "mqtt_password": "PASSWORD",
+  "mqtt_username": "<USERNAME>",
+  "mqtt_password": "<PASSWORD>",
   "mqtt_topics": [
     "meshcore/TPA/+/packets",
     "meshcore/JAX/+/packets",
