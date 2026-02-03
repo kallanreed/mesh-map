@@ -26,10 +26,11 @@ function addItem(map, id, observed, heard, time) {
 
 export async function onRequest(context) {
   const tiles = new Map();
-  let cursor = null;
-
+  const oldestCutoff = Date.now() - (10 * util.dayInMillis);
   const { results: coverage } = await context.env.DB
-    .prepare("SELECT hash, time, observed, heard FROM coverage").all();
+    .prepare(`SELECT hash, time, observed, heard FROM coverage
+              WHERE time >= ? OR observed > 0 OR heard > 0`)
+    .bind(oldestCutoff).all();
   coverage.forEach(c => {
     addItem(tiles, c.hash, c.observed, c.heard, c.time);
   });
